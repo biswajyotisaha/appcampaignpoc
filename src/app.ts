@@ -9,6 +9,7 @@ import healthRoutes from './routes/health.routes';
 import campaignRoutes from './routes/campaign.routes';
 import clickRoutes from './routes/click.routes';
 import attributionRoutes from './routes/attribution.routes';
+import statsRoutes from './routes/stats.routes';
 
 export function createApp() {
   const app = express();
@@ -35,6 +36,7 @@ export function createApp() {
   app.use('/c', clickRoutes);
   app.use('/api/v1/campaigns', campaignRoutes);
   app.use('/api/v1/attribution', attributionRoutes);
+  app.use('/api/v1/stats', statsRoutes);
 
   // Serve React frontend in production
   if (config.nodeEnv === 'production') {

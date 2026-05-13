@@ -2,12 +2,14 @@ import { useState, useEffect } from 'react';
 import { Campaign, fetchCampaigns, createCampaign, deleteCampaign, CreateCampaignInput } from './api';
 import CampaignForm from './CampaignForm';
 import CampaignList from './CampaignList';
+import CampaignChart from './CampaignChart';
 
 export default function App() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [chartCampaign, setChartCampaign] = useState<Campaign | null>(null);
 
   const loadCampaigns = async () => {
     try {
@@ -40,6 +42,7 @@ export default function App() {
     if (!confirm('Are you sure you want to delete this campaign?')) return;
     try {
       await deleteCampaign(id);
+      if (chartCampaign?.id === id) setChartCampaign(null);
       await loadCampaigns();
     } catch (err: any) {
       setError(err.message);
@@ -80,11 +83,22 @@ export default function App() {
           </div>
         )}
 
+        {/* Analytics Chart */}
+        {chartCampaign && (
+          <div className="mb-8">
+            <CampaignChart campaign={chartCampaign} onClose={() => setChartCampaign(null)} />
+          </div>
+        )}
+
         {/* Campaign List */}
         {loading ? (
           <div className="text-center py-12 text-gray-500">Loading campaigns...</div>
         ) : (
-          <CampaignList campaigns={campaigns} onDelete={handleDelete} />
+          <CampaignList
+            campaigns={campaigns}
+            onDelete={handleDelete}
+            onViewStats={(campaign) => setChartCampaign(campaign)}
+          />
         )}
       </main>
     </div>

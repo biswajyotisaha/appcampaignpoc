@@ -49,6 +49,7 @@ export async function matchAttribution(request: AttributionRequest): Promise<Att
 
   // Increment install count for this campaign
   await storage.incrementInstallCount(campaign.id);
+  await storage.recordInstallEvent(campaign.id, now);
 
   return {
     matched: true,

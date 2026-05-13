@@ -4,9 +4,10 @@ import { Campaign } from './api';
 interface Props {
   campaigns: Campaign[];
   onDelete: (id: string) => void;
+  onViewStats: (campaign: Campaign) => void;
 }
 
-export default function CampaignList({ campaigns, onDelete }: Props) {
+export default function CampaignList({ campaigns, onDelete, onViewStats }: Props) {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [expandedGuide, setExpandedGuide] = useState<string | null>(null);
 
@@ -163,12 +164,20 @@ let attribution = try JSONDecoder().decode(AttributionResponse.self, from: data)
               <span className="text-xs text-gray-400">
                 Created {new Date(campaign.createdAt).toLocaleDateString()}
               </span>
-              <button
-                onClick={() => onDelete(campaign.id)}
-                className="text-xs text-red-500 hover:text-red-700 font-medium transition-colors"
-              >
-                Delete
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => onViewStats(campaign)}
+                  className="text-xs text-indigo-500 hover:text-indigo-700 font-medium transition-colors"
+                >
+                  View Stats
+                </button>
+                <button
+                  onClick={() => onDelete(campaign.id)}
+                  className="text-xs text-red-500 hover:text-red-700 font-medium transition-colors"
+                >
+                  Delete
+                </button>
+              </div>
             </div>
           </div>
         ))}

@@ -61,3 +61,23 @@ export async function deleteCampaign(id: string): Promise<void> {
   const res = await fetch(`${BASE}/campaigns/${id}`, { method: 'DELETE' });
   if (!res.ok) throw new Error('Failed to delete campaign');
 }
+
+export interface DailyStat {
+  date: string;
+  clicks: number;
+  installs: number;
+}
+
+export interface CampaignStats {
+  campaignId: string;
+  campaignName: string;
+  totalClicks: number;
+  totalInstalls: number;
+  daily: DailyStat[];
+}
+
+export async function fetchCampaignStats(campaignId: string): Promise<CampaignStats> {
+  const res = await fetch(`${BASE}/stats/${campaignId}`);
+  if (!res.ok) throw new Error('Failed to fetch stats');
+  return res.json();
+}

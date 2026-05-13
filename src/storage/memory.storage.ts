@@ -1,12 +1,13 @@
 import { Campaign } from '../models/campaign.model';
 import { ClickRecord } from '../models/click.model';
-import { IStorage } from './storage.interface';
+import { IStorage, DailyStat } from './storage.interface';
 
 export class MemoryStorage implements IStorage {
   private campaigns: Map<string, Campaign> = new Map();
   private clicks: Map<string, ClickRecord> = new Map();
   private clicksByFingerprint: Map<string, string[]> = new Map(); // fingerprint -> clickIds
   private slugToId: Map<string, string> = new Map(); // slug -> campaignId
+  private installEvents: Map<string, Date[]> = new Map(); // campaignId -> timestamps
 
   // --- Campaigns ---
 
@@ -65,6 +66,40 @@ export class MemoryStorage implements IStorage {
     if (campaign) {
       campaign.installCount += 1;
     }
+  }
+
+  // --- Analytics ---
+
+  async recordInstallEvent(campaignId: string, timestamp: Date): Promise<void> {
+    const events = this.installEvents.get(campaignId) || [];
+    events.push(timestamp);
+    this.installEvents.set(campaignId, events);
+  }
+
+  async getDailyStats(campaignId: string): Promise<DailyStat[]> {
+    const statsMap: Record<string, { clicks: number; installs: number }> = {};
+
+    // Aggregate clicks by date
+    for (const click of this.clicks.values()) {
+      if (click.campaignId === campaignId) {
+        const date = click.clickedAt.toISOString().split('T')[0];
+        if (!statsMap[date]) statsMap[date] = { clicks: 0, installs: 0 };
+        statsMap[date].clicks += 1;
+      }
+    }
+
+    // Aggregate installs by date
+    const installDates = this.installEvents.get(campaignId) || [];
+    for (const ts of installDates) {
+      const date = ts.toISOString().split('T')[0];
+      if (!statsMap[date]) statsMap[date] = { clicks: 0, installs: 0 };
+      statsMap[date].installs += 1;
+    }
+
+    // Sort by date and return
+    return Object.entries(statsMap)
+      .map(([date, counts]) => ({ date, ...counts }))
+      .sort((a, b) => a.date.localeCompare(b.date));
   }
 
   // --- Clicks ---

@@ -13,6 +13,7 @@ export default function CampaignForm({ onSubmit, onCancel }: Props) {
   const [androidUrl, setAndroidUrl] = useState('');
   const [fallbackUrl, setFallbackUrl] = useState('');
   const [metadataStr, setMetadataStr] = useState('');
+  const [metadataError, setMetadataError] = useState<string | null>(null);
 
   const handleNameChange = (value: string) => {
     setName(value);
@@ -24,17 +25,38 @@ export default function CampaignForm({ onSubmit, onCancel }: Props) {
     setSlug(autoSlug);
   };
 
+  const validateMetadata = (value: string) => {
+    setMetadataStr(value);
+    if (!value.trim()) {
+      setMetadataError(null);
+      return;
+    }
+    try {
+      const parsed = JSON.parse(value);
+      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+        setMetadataError('Must be a JSON object (e.g., {"key": "value"})');
+        return;
+      }
+      // Check all values are strings
+      for (const [k, v] of Object.entries(parsed)) {
+        if (typeof v !== 'string') {
+          setMetadataError(`Value for "${k}" must be a string`);
+          return;
+        }
+      }
+      setMetadataError(null);
+    } catch {
+      setMetadataError('Invalid JSON syntax');
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
     let metadata: Record<string, string> = {};
     if (metadataStr.trim()) {
-      try {
-        metadata = JSON.parse(metadataStr);
-      } catch {
-        alert('Metadata must be valid JSON (e.g., {"source": "facebook"})');
-        return;
-      }
+      if (metadataError) return; // Block submit if invalid
+      metadata = JSON.parse(metadataStr);
     }
 
     onSubmit({ name, slug, iosUrl, androidUrl, fallbackUrl, metadata });
@@ -115,14 +137,20 @@ export default function CampaignForm({ onSubmit, onCancel }: Props) {
         {/* Metadata */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Metadata (JSON)</label>
-          <input
-            type="text"
+          <textarea
             value={metadataStr}
-            onChange={(e) => setMetadataStr(e.target.value)}
-            placeholder='{"source": "facebook", "topic": "sleep"}'
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none font-mono"
+            onChange={(e) => validateMetadata(e.target.value)}
+            placeholder={'{\n  "source": "facebook",\n  "topic": "sleep"\n}'}
+            rows={3}
+            className={`w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none font-mono resize-none ${
+              metadataError ? 'border-red-400 bg-red-50' : 'border-gray-300'
+            }`}
           />
-          <p className="text-xs text-gray-400 mt-1">Optional. Key-value pairs passed to the app on attribution</p>
+          {metadataError ? (
+            <p className="text-xs text-red-500 mt-1">{metadataError}</p>
+          ) : (
+            <p className="text-xs text-gray-400 mt-1">Optional. Key-value pairs passed to the app on attribution</p>
+          )}
         </div>
       </div>
 
@@ -130,7 +158,8 @@ export default function CampaignForm({ onSubmit, onCancel }: Props) {
       <div className="flex items-center gap-3 mt-6 pt-4 border-t border-gray-100">
         <button
           type="submit"
-          className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
+          disabled={!!metadataError}
+          className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           Create Campaign
         </button>
