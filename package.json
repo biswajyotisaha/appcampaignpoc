@@ -1,0 +1,34 @@
+{
+  "name": "campaign-attribution-server",
+  "version": "1.0.0",
+  "description": "Campaign attribution server for tracking app installs from ad campaigns",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "lint": "eslint src/",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": ["attribution", "campaign", "mobile", "tracking"],
+  "license": "UNLICENSED",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.0",
+    "express-rate-limit": "^7.4.0",
+    "pino": "^9.4.0",
+    "pino-pretty": "^11.2.0",
+    "ua-parser-js": "^1.0.38",
+    "uuid": "^10.0.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.14.0",
+    "@types/ua-parser-js": "^0.7.39",
+    "@types/uuid": "^10.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.0"
+  }
+}

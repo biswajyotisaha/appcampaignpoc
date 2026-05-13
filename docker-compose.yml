@@ -1,0 +1,11 @@
+version: '3.8'
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - NODE_ENV=development
+      - BASE_URL=http://localhost:3000
+      - ATTRIBUTION_WINDOW_HOURS=24

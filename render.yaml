@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: campaign-attribution-server
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: PORT
+        value: "3000"
+      - key: NODE_ENV
+        value: production
+      - key: ATTRIBUTION_WINDOW_HOURS
+        value: "24"
+    healthCheckPath: /health
+    autoDeploy: true

@@ -1,0 +1,19 @@
+import { Campaign, CreateCampaignDto, UpdateCampaignDto } from '../models/campaign.model';
+import { ClickRecord } from '../models/click.model';
+
+export interface IStorage {
+  // Campaigns
+  createCampaign(campaign: Campaign): Promise<Campaign>;
+  getCampaignById(id: string): Promise<Campaign | null>;
+  getCampaignBySlug(slug: string): Promise<Campaign | null>;
+  getAllCampaigns(): Promise<Campaign[]>;
+  updateCampaign(id: string, data: Partial<Campaign>): Promise<Campaign | null>;
+  deleteCampaign(id: string): Promise<boolean>;
+  incrementClickCount(id: string): Promise<void>;
+
+  // Clicks
+  createClick(click: ClickRecord): Promise<ClickRecord>;
+  getClicksByFingerprint(fingerprint: string): Promise<ClickRecord[]>;
+  getClicksByCampaignId(campaignId: string): Promise<ClickRecord[]>;
+  purgeExpiredClicks(): Promise<number>;
+}
