@@ -74,6 +74,7 @@ CLICK TIME:                          INSTALL TIME:
 │  │  /api/v1/campaigns    → Campaign CRUD           │   │
 │  │  /c/:slug             → Click & Redirect        │   │
 │  │  /api/v1/attribution  → Match API               │   │
+│  │  /api/v1/stats        → Analytics API           │   │
 │  │  /health              → Health Check            │   │
 │  │  /*                   → React Dashboard (prod)  │   │
 │  └───────────────────────────────────────────────┘   │
@@ -119,7 +120,8 @@ appcampaignpoc/
 │   │   ├── health.routes.ts      # GET /health
 │   │   ├── campaign.routes.ts    # CRUD /api/v1/campaigns
 │   │   ├── click.routes.ts       # GET /c/:slug (redirect)
-│   │   └── attribution.routes.ts # POST /api/v1/attribution/match
+│   │   ├── attribution.routes.ts # POST /api/v1/attribution/match
+│   │   └── stats.routes.ts       # GET /api/v1/stats/:campaignId
 │   ├── middleware/
 │   │   ├── error-handler.ts      # Global error handling
 │   │   └── request-logger.ts     # Structured request logging
@@ -139,6 +141,7 @@ appcampaignpoc/
         ├── App.tsx               # Main app shell
         ├── CampaignForm.tsx      # Create campaign form
         ├── CampaignList.tsx      # Campaign cards with tracking links
+        ├── CampaignChart.tsx     # Analytics chart (Recharts line chart)
         ├── api.ts                # API client (fetch wrapper)
         ├── index.css             # Tailwind base styles
         └── vite-env.d.ts         # Vite type declarations
@@ -165,9 +168,11 @@ The React frontend provides an admin dashboard for managing campaigns:
 
 - **Create campaigns** with App Store, Play Store, and fallback URLs
 - **Auto-generates URL slugs** from campaign names
+- **Fixed metadata fields** — Source and Topic inputs (keys are fixed, no raw JSON)
 - **Copy tracking links** to clipboard with one click
-- **View click counts** per campaign
-- **Add metadata** (key-value pairs passed to the app on attribution match)
+- **View click & install counts** per campaign
+- **Analytics charts** — Recharts line chart showing daily clicks/installs over time
+- **Mobile integration guide** — per-campaign code snippets for iOS/Android (Swift, JS)
 - **Delete campaigns** with confirmation
 
 In production, the dashboard is served by the same Express server at the root URL (`/`).
@@ -246,9 +251,8 @@ Request:
   "androidUrl": "https://play.google.com/store/apps/details?id=com.example.app",
   "fallbackUrl": "https://example.com/landing",
   "metadata": {
-    "health_topic": "sleep",
-    "source": "paid_ad",
-    "campaign": "sleep_q3_2026"
+    "source": "facebook",
+    "topic": "sleep"
   }
 }
 ```
@@ -263,8 +267,9 @@ Response (201):
   "iosUrl": "https://apps.apple.com/app/id123456",
   "androidUrl": "https://play.google.com/store/apps/details?id=com.example.app",
   "fallbackUrl": "https://example.com/landing",
-  "metadata": { "health_topic": "sleep", "source": "paid_ad", "campaign": "sleep_q3_2026" },
+  "metadata": { "source": "facebook", "topic": "sleep" },
   "clickCount": 0,
+  "installCount": 0,
   "createdAt": "2026-05-13T10:00:00.000Z",
   "updatedAt": "2026-05-13T10:00:00.000Z"
 }
@@ -353,7 +358,14 @@ Content-Type: application/json
 
 Called by your app on first launch to retrieve campaign context.
 
-Request:
+The server automatically detects the device's IP and User-Agent from request headers — the request body can be empty or optionally include overrides:
+
+Request (minimal):
+```json
+{}
+```
+
+Request (with explicit overrides):
 ```json
 {
   "ip": "203.0.113.42",
@@ -371,9 +383,8 @@ Response (match found):
     "campaignName": "Sleep Wellness Q3",
     "campaignSlug": "sleep-q3",
     "metadata": {
-      "health_topic": "sleep",
-      "source": "paid_ad",
-      "campaign": "sleep_q3_2026"
+      "source": "facebook",
+      "topic": "sleep"
     },
     "clickedAt": "2026-05-13T10:30:00.000Z",
     "matchConfidence": "high",
@@ -381,6 +392,8 @@ Response (match found):
   }
 }
 ```
+
+> **Note:** A successful match consumes the click — the same device will not match again for the same campaign. This prevents duplicate attributions and increments the campaign's `installCount`.
 
 Response (no match):
 ```json
@@ -394,6 +407,31 @@ Response (no match):
 - `high`: Click was less than 1 hour before install
 - `medium`: Click was 1-6 hours before install
 - `low`: Click was 6-24 hours before install
+
+---
+
+### Campaign Stats (Analytics)
+
+```
+GET /api/v1/stats/:campaignId
+```
+
+Returns daily aggregated click and install counts for a campaign, used by the dashboard chart.
+
+Response:
+```json
+{
+  "campaignId": "550e8400-e29b-41d4-a716-446655440000",
+  "campaignName": "Sleep Wellness Q3",
+  "totalClicks": 142,
+  "totalInstalls": 38,
+  "daily": [
+    { "date": "2026-05-10", "clicks": 45, "installs": 12 },
+    { "date": "2026-05-11", "clicks": 52, "installs": 14 },
+    { "date": "2026-05-12", "clicks": 45, "installs": 12 }
+  ]
+}
+```
 
 ---
 
@@ -425,12 +463,12 @@ curl -v -A "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/6
 # 4. Query attribution (simulating app's first launch)
 curl -X POST http://localhost:3000/api/v1/attribution/match \
   -H "Content-Type: application/json" \
-  -d '{
-    "ip": "127.0.0.1",
-    "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15",
-    "installedAt": "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"
-  }'
+  -d '{}'
 # → Should return { "matched": true, "attribution": { ... } }
+# → The click is consumed — calling again returns { "matched": false }
+
+# 5. Check analytics
+curl http://localhost:3000/api/v1/stats/<campaign-id-from-step-2>
 ```
 
 ---
@@ -474,6 +512,7 @@ The `render.yaml` configures:
 - React 18
 - Vite
 - Tailwind CSS
+- Recharts (analytics charts)
 - TypeScript
 
 **Infrastructure:**
@@ -486,9 +525,10 @@ The `render.yaml` configures:
 
 - [ ] PostgreSQL/Redis storage backend
 - [ ] Authentication for campaign management APIs
-- [ ] Campaign analytics (charts, conversion rates)
+- [x] Campaign analytics (charts, conversion rates)
 - [ ] Webhook notifications on attribution match
 - [ ] Support for deep links (app already installed)
-- [ ] Click deduplication (same device, same campaign)
+- [x] Click deduplication (same device, same campaign — click consumed on match)
 - [ ] A/B testing support via campaign variants
+- [x] Install tracking and mobile integration guide
 - [ ] SDK packages for iOS/Android integration
