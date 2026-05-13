@@ -7,12 +7,13 @@ import { logger } from '../utils/logger';
 const router = Router();
 
 // GET /c/:slug - Record click and redirect to store
-router.get('/:slug', async (req: Request, res: Response) => {
+router.get('/:slug', async (req: Request, res: Response): Promise<void> => {
   const { slug } = req.params;
 
   const campaign = await campaignService.getCampaignBySlug(slug);
   if (!campaign) {
-    return res.status(404).json({ error: 'Campaign not found' });
+    res.status(404).json({ error: 'Campaign not found' });
+    return;
   }
 
   const userAgent = req.headers['user-agent'] || '';
@@ -37,7 +38,7 @@ router.get('/:slug', async (req: Request, res: Response) => {
 
   logger.info({ slug, device, ip: ip.substring(0, 10) + '...' }, 'Click redirect');
 
-  return res.redirect(302, url);
+  res.redirect(302, url);
 });
 
 export default router;

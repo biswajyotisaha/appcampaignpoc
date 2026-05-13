@@ -23,32 +23,34 @@ const updateCampaignSchema = z.object({
 });
 
 // POST /api/v1/campaigns - Create campaign
-router.post('/', async (req: Request, res: Response) => {
+router.post('/', async (req: Request, res: Response): Promise<void> => {
   try {
     const parsed = createCampaignSchema.safeParse(req.body);
     if (!parsed.success) {
-      return res.status(400).json({ error: 'Validation failed', details: parsed.error.issues });
+      res.status(400).json({ error: 'Validation failed', details: parsed.error.issues });
+      return;
     }
 
     const campaign = await campaignService.createCampaign(parsed.data);
     const baseUrl = `${req.protocol}://${req.get('host')}`;
-    return res.status(201).json({
+    res.status(201).json({
       ...campaign,
       trackingLink: `${baseUrl}/c/${campaign.slug}`,
     });
   } catch (err: any) {
     if (err.message?.includes('already exists')) {
-      return res.status(409).json({ error: err.message });
+      res.status(409).json({ error: err.message });
+      return;
     }
     throw err;
   }
 });
 
 // GET /api/v1/campaigns - List all campaigns
-router.get('/', async (req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response): Promise<void> => {
   const campaigns = await campaignService.getAllCampaigns();
   const baseUrl = `${req.protocol}://${req.get('host')}`;
-  return res.json({
+  res.json({
     campaigns: campaigns.map(c => ({
       ...c,
       trackingLink: `${baseUrl}/c/${c.slug}`,
@@ -58,50 +60,55 @@ router.get('/', async (req: Request, res: Response) => {
 });
 
 // GET /api/v1/campaigns/:id - Get campaign by ID
-router.get('/:id', async (req: Request, res: Response) => {
+router.get('/:id', async (req: Request, res: Response): Promise<void> => {
   const campaign = await campaignService.getCampaignById(req.params.id);
   if (!campaign) {
-    return res.status(404).json({ error: 'Campaign not found' });
+    res.status(404).json({ error: 'Campaign not found' });
+    return;
   }
   const baseUrl = `${req.protocol}://${req.get('host')}`;
-  return res.json({
+  res.json({
     ...campaign,
     trackingLink: `${baseUrl}/c/${campaign.slug}`,
   });
 });
 
 // PUT /api/v1/campaigns/:id - Update campaign
-router.put('/:id', async (req: Request, res: Response) => {
+router.put('/:id', async (req: Request, res: Response): Promise<void> => {
   try {
     const parsed = updateCampaignSchema.safeParse(req.body);
     if (!parsed.success) {
-      return res.status(400).json({ error: 'Validation failed', details: parsed.error.issues });
+      res.status(400).json({ error: 'Validation failed', details: parsed.error.issues });
+      return;
     }
 
     const updated = await campaignService.updateCampaign(req.params.id, parsed.data);
     if (!updated) {
-      return res.status(404).json({ error: 'Campaign not found' });
+      res.status(404).json({ error: 'Campaign not found' });
+      return;
     }
     const baseUrl = `${req.protocol}://${req.get('host')}`;
-    return res.json({
+    res.json({
       ...updated,
       trackingLink: `${baseUrl}/c/${updated.slug}`,
     });
   } catch (err: any) {
     if (err.message?.includes('already exists')) {
-      return res.status(409).json({ error: err.message });
+      res.status(409).json({ error: err.message });
+      return;
     }
     throw err;
   }
 });
 
 // DELETE /api/v1/campaigns/:id - Delete campaign
-router.delete('/:id', async (req: Request, res: Response) => {
+router.delete('/:id', async (req: Request, res: Response): Promise<void> => {
   const deleted = await campaignService.deleteCampaign(req.params.id);
   if (!deleted) {
-    return res.status(404).json({ error: 'Campaign not found' });
+    res.status(404).json({ error: 'Campaign not found' });
+    return;
   }
-  return res.status(204).send();
+  res.status(204).send();
 });
 
 export default router;

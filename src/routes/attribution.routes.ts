@@ -12,14 +12,15 @@ const attributionRequestSchema = z.object({
 });
 
 // POST /api/v1/attribution/match - Match device to campaign
-router.post('/match', async (req: Request, res: Response) => {
+router.post('/match', async (req: Request, res: Response): Promise<void> => {
   const parsed = attributionRequestSchema.safeParse(req.body);
   if (!parsed.success) {
-    return res.status(400).json({ error: 'Validation failed', details: parsed.error.issues });
+    res.status(400).json({ error: 'Validation failed', details: parsed.error.issues });
+    return;
   }
 
   const result = await matchAttribution(parsed.data);
-  return res.json(result);
+  res.json(result);
 });
 
 export default router;
