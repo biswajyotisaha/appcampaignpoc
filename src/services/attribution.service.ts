@@ -2,7 +2,10 @@ import { AttributionRequest, AttributionResult } from '../models/attribution.mod
 import { generateFingerprint } from './fingerprint.service';
 import { getClicksByFingerprint } from './click.service';
 import { getCampaignById } from './campaign.service';
+import { getStorage } from '../storage';
 import { config } from '../config';
+
+const storage = getStorage();
 
 /**
  * Attempts to match a device's first launch to a prior campaign click.
@@ -43,6 +46,9 @@ export async function matchAttribution(request: AttributionRequest): Promise<Att
   // Calculate confidence based on time delta
   const deltaHours = (now.getTime() - bestMatch.clickedAt.getTime()) / (1000 * 60 * 60);
   const matchConfidence = getConfidence(deltaHours);
+
+  // Increment install count for this campaign
+  await storage.incrementInstallCount(campaign.id);
 
   return {
     matched: true,

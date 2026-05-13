@@ -20,6 +20,7 @@ export async function createCampaign(dto: CreateCampaignDto): Promise<Campaign> 
     fallbackUrl: dto.fallbackUrl,
     metadata: dto.metadata || {},
     clickCount: 0,
+    installCount: 0,
     createdAt: new Date(),
     updatedAt: new Date(),
   };

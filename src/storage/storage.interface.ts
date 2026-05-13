@@ -10,6 +10,7 @@ export interface IStorage {
   updateCampaign(id: string, data: Partial<Campaign>): Promise<Campaign | null>;
   deleteCampaign(id: string): Promise<boolean>;
   incrementClickCount(id: string): Promise<void>;
+  incrementInstallCount(id: string): Promise<void>;
 
   // Clicks
   createClick(click: ClickRecord): Promise<ClickRecord>;

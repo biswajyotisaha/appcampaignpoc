@@ -60,6 +60,13 @@ export class MemoryStorage implements IStorage {
     }
   }
 
+  async incrementInstallCount(id: string): Promise<void> {
+    const campaign = this.campaigns.get(id);
+    if (campaign) {
+      campaign.installCount += 1;
+    }
+  }
+
   // --- Clicks ---
 
   async createClick(click: ClickRecord): Promise<ClickRecord> {

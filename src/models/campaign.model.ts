@@ -7,6 +7,7 @@ export interface Campaign {
   fallbackUrl: string;
   metadata: Record<string, string>;
   clickCount: number;
+  installCount: number;
   createdAt: Date;
   updatedAt: Date;
 }

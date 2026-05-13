@@ -8,6 +8,7 @@ interface Props {
 
 export default function CampaignList({ campaigns, onDelete }: Props) {
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [expandedGuide, setExpandedGuide] = useState<string | null>(null);
 
   if (campaigns.length === 0) {
     return (
@@ -24,6 +25,8 @@ export default function CampaignList({ campaigns, onDelete }: Props) {
     setCopiedId(campaign.id);
     setTimeout(() => setCopiedId(null), 2000);
   };
+
+  const baseUrl = window.location.origin;
 
   return (
     <div className="space-y-4">
@@ -45,6 +48,9 @@ export default function CampaignList({ campaigns, onDelete }: Props) {
               <div className="flex items-center gap-2 ml-4">
                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
                   {campaign.clickCount} clicks
+                </span>
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                  {campaign.installCount} installs
                 </span>
               </div>
             </div>
@@ -91,6 +97,66 @@ export default function CampaignList({ campaigns, onDelete }: Props) {
                 ))}
               </div>
             )}
+
+            {/* Integration Guide Toggle */}
+            <div className="mt-3">
+              <button
+                onClick={() => setExpandedGuide(expandedGuide === campaign.id ? null : campaign.id)}
+                className="text-xs font-medium text-indigo-600 hover:text-indigo-800 transition-colors"
+              >
+                {expandedGuide === campaign.id ? 'Hide' : 'Show'} Integration Guide
+              </button>
+
+              {expandedGuide === campaign.id && (
+                <div className="mt-2 bg-gray-50 rounded-lg border border-gray-200 p-4 text-xs">
+                  <h4 className="font-semibold text-gray-900 mb-2">Mobile App Integration</h4>
+                  <p className="text-gray-600 mb-3">
+                    Call this endpoint from your app on first launch to retrieve campaign context.
+                    The server automatically detects the device's IP and User-Agent from the request headers — no manual setup needed.
+                  </p>
+
+                  <div className="mb-2 font-medium text-gray-700">Endpoint:</div>
+                  <code className="block bg-white px-3 py-2 rounded border border-gray-200 text-gray-800 mb-3">
+                    POST {baseUrl}/api/v1/attribution/match
+                  </code>
+
+                  <div className="mb-2 font-medium text-gray-700">Request (minimal — just call it, no body needed):</div>
+                  <pre className="bg-white px-3 py-2 rounded border border-gray-200 text-gray-800 mb-3 overflow-x-auto">
+{`fetch("${baseUrl}/api/v1/attribution/match", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({})
+})`}
+                  </pre>
+
+                  <div className="mb-2 font-medium text-gray-700">Swift Example:</div>
+                  <pre className="bg-white px-3 py-2 rounded border border-gray-200 text-gray-800 mb-3 overflow-x-auto">
+{`var request = URLRequest(url: URL(string: "${baseUrl}/api/v1/attribution/match")!)
+request.httpMethod = "POST"
+request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+request.httpBody = "{}".data(using: .utf8)
+let (data, _) = try await URLSession.shared.data(for: request)
+let attribution = try JSONDecoder().decode(AttributionResponse.self, from: data)`}
+                  </pre>
+
+                  <div className="mb-2 font-medium text-gray-700">Response (when matched):</div>
+                  <pre className="bg-white px-3 py-2 rounded border border-gray-200 text-gray-800 overflow-x-auto">
+{`{
+  "matched": true,
+  "attribution": {
+    "campaignId": "${campaign.id}",
+    "campaignName": "${campaign.name}",
+    "campaignSlug": "${campaign.slug}",
+    "metadata": ${JSON.stringify(campaign.metadata, null, 4)},
+    "clickedAt": "2026-05-13T10:30:00.000Z",
+    "matchConfidence": "high",
+    "matchMethod": "fingerprint"
+  }
+}`}
+                  </pre>
+                </div>
+              )}
+            </div>
 
             {/* Footer */}
             <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between">
