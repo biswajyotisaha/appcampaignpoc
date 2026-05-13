@@ -128,6 +128,13 @@ export class MemoryStorage implements IStorage {
     return Array.from(this.clicks.values()).filter(c => c.campaignId === campaignId);
   }
 
+  async markClickConsumed(clickId: string): Promise<void> {
+    const click = this.clicks.get(clickId);
+    if (click) {
+      click.consumed = true;
+    }
+  }
+
   async purgeExpiredClicks(): Promise<number> {
     const now = new Date();
     let purged = 0;

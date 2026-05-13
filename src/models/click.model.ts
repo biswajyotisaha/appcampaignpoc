@@ -10,4 +10,5 @@ export interface ClickRecord {
   referer: string | null;
   clickedAt: Date;
   expiresAt: Date;       // clickedAt + attribution window
+  consumed: boolean;     // true after attribution match — prevents repeat matches
 }

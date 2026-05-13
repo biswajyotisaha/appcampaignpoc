@@ -23,9 +23,9 @@ export async function matchAttribution(request: AttributionRequest): Promise<Att
 
   const now = new Date(request.installedAt);
 
-  // Filter: only clicks that haven't expired and happened before the install
+  // Filter: only clicks that haven't expired, happened before the install, and are unconsumed
   const validClicks = clicks.filter(click => {
-    return click.expiresAt > now && click.clickedAt <= now;
+    return !click.consumed && click.expiresAt > now && click.clickedAt <= now;
   });
 
   if (validClicks.length === 0) {
@@ -50,6 +50,9 @@ export async function matchAttribution(request: AttributionRequest): Promise<Att
   // Increment install count for this campaign
   await storage.incrementInstallCount(campaign.id);
   await storage.recordInstallEvent(campaign.id, now);
+
+  // Mark this click as consumed — prevents repeat attribution until user clicks again
+  await storage.markClickConsumed(bestMatch.id);
 
   return {
     matched: true,

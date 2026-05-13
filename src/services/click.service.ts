@@ -30,6 +30,7 @@ export async function recordClick(input: RecordClickInput): Promise<ClickRecord>
     referer: input.referer,
     clickedAt: now,
     expiresAt,
+    consumed: false,
   };
 
   await storage.createClick(click);

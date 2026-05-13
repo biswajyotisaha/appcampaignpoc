@@ -26,5 +26,6 @@ export interface IStorage {
   createClick(click: ClickRecord): Promise<ClickRecord>;
   getClicksByFingerprint(fingerprint: string): Promise<ClickRecord[]>;
   getClicksByCampaignId(campaignId: string): Promise<ClickRecord[]>;
+  markClickConsumed(clickId: string): Promise<void>;
   purgeExpiredClicks(): Promise<number>;
 }
