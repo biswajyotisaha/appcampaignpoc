@@ -8,6 +8,5 @@ app.listen(config.port, () => {
   logger.info({
     port: config.port,
     env: config.nodeEnv,
-    baseUrl: config.baseUrl,
   }, `Campaign Attribution Server running on port ${config.port}`);
 });
