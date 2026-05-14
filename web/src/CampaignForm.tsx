@@ -15,6 +15,12 @@ export default function CampaignForm({ onSubmit, onCancel }: Props) {
   const [source, setSource] = useState('');
   const [topic, setTopic] = useState('');
 
+  // Deep link fields
+  const [showDeepLink, setShowDeepLink] = useState(false);
+  const [iosScheme, setIosScheme] = useState('');
+  const [androidPackage, setAndroidPackage] = useState('');
+  const [deepLinkPath, setDeepLinkPath] = useState('');
+
   const handleNameChange = (value: string) => {
     setName(value);
     // Auto-generate slug from name
@@ -33,7 +39,17 @@ export default function CampaignForm({ onSubmit, onCancel }: Props) {
     if (source.trim()) metadata.source = source.trim();
     if (topic.trim()) metadata.topic = topic.trim();
 
-    onSubmit({ name, slug, iosUrl, androidUrl, fallbackUrl, metadata });
+    const input: CreateCampaignInput = { name, slug, iosUrl, androidUrl, fallbackUrl, metadata };
+
+    // Include deepLink only if at least one field is filled
+    if (iosScheme.trim() || androidPackage.trim() || deepLinkPath.trim()) {
+      input.deepLink = {};
+      if (iosScheme.trim()) input.deepLink.iosScheme = iosScheme.trim();
+      if (androidPackage.trim()) input.deepLink.androidPackage = androidPackage.trim();
+      if (deepLinkPath.trim()) input.deepLink.deepLinkPath = deepLinkPath.trim();
+    }
+
+    onSubmit(input);
   };
 
   return (
@@ -133,6 +149,100 @@ export default function CampaignForm({ onSubmit, onCancel }: Props) {
           />
           <p className="text-xs text-gray-400 mt-1">Optional. Campaign topic for categorization</p>
         </div>
+      </div>
+
+      {/* Deep Link Section */}
+      <div className="mt-6 border-t border-gray-100 pt-4">
+        <button
+          type="button"
+          onClick={() => setShowDeepLink(!showDeepLink)}
+          className="flex items-center gap-2 text-sm font-medium text-indigo-600 hover:text-indigo-700"
+        >
+          <svg className={`w-4 h-4 transition-transform ${showDeepLink ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+          Deep Linking (Optional)
+        </button>
+        <p className="text-xs text-gray-400 mt-1">Open the app directly if installed, otherwise redirect to store</p>
+
+        {showDeepLink && (
+          <div className="mt-4 space-y-4">
+            {/* Setup Instructions */}
+            <div className="bg-indigo-50 border border-indigo-100 rounded-lg p-4">
+              <h4 className="text-sm font-semibold text-indigo-900 mb-2">Setup Instructions</h4>
+              <div className="space-y-3">
+                <div>
+                  <p className="text-xs font-medium text-indigo-800 mb-1">iOS — Register scheme in Info.plist:</p>
+                  <pre className="text-xs bg-white border border-indigo-100 rounded p-2 overflow-x-auto text-gray-700">
+{`<key>CFBundleURLTypes</key>
+<array>
+  <dict>
+    <key>CFBundleURLSchemes</key>
+    <array>
+      <string>your-scheme</string>
+    </array>
+  </dict>
+</array>`}
+                  </pre>
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-indigo-800 mb-1">Android — Add intent filter in AndroidManifest.xml:</p>
+                  <pre className="text-xs bg-white border border-indigo-100 rounded p-2 overflow-x-auto text-gray-700">
+{`<activity android:name=".MainActivity">
+  <intent-filter>
+    <action android:name="android.intent.action.VIEW" />
+    <category android:name="android.intent.category.DEFAULT" />
+    <category android:name="android.intent.category.BROWSABLE" />
+    <data android:scheme="your-package-name" />
+  </intent-filter>
+</activity>`}
+                  </pre>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* iOS Scheme */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">iOS URL Scheme</label>
+                <input
+                  type="text"
+                  value={iosScheme}
+                  onChange={(e) => setIosScheme(e.target.value)}
+                  placeholder="e.g., myapp"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none font-mono"
+                />
+                <p className="text-xs text-gray-400 mt-1">The CFBundleURLSchemes value from your Info.plist</p>
+              </div>
+
+              {/* Android Package */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Android Package Name</label>
+                <input
+                  type="text"
+                  value={androidPackage}
+                  onChange={(e) => setAndroidPackage(e.target.value)}
+                  placeholder="e.g., com.company.myapp"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none font-mono"
+                />
+                <p className="text-xs text-gray-400 mt-1">The android:scheme value from your AndroidManifest.xml</p>
+              </div>
+
+              {/* Deep Link Path */}
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Deep Link Path</label>
+                <input
+                  type="text"
+                  value={deepLinkPath}
+                  onChange={(e) => setDeepLinkPath(e.target.value)}
+                  placeholder="/campaign/{slug}"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none font-mono"
+                />
+                <p className="text-xs text-gray-400 mt-1">Path inside the app. Use {'{slug}'} as a placeholder for the campaign slug. Default: /campaign/{'{slug}'}</p>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Actions */}

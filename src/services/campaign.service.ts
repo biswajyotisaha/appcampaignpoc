@@ -19,6 +19,7 @@ export async function createCampaign(dto: CreateCampaignDto): Promise<Campaign> 
     androidUrl: dto.androidUrl,
     fallbackUrl: dto.fallbackUrl,
     metadata: dto.metadata || {},
+    deepLink: dto.deepLink,
     clickCount: 0,
     installCount: 0,
     createdAt: new Date(),

@@ -1,3 +1,9 @@
+export interface DeepLinkConfig {
+  iosScheme?: string;
+  androidPackage?: string;
+  deepLinkPath?: string;
+}
+
 export interface Campaign {
   id: string;
   name: string;
@@ -6,6 +12,7 @@ export interface Campaign {
   androidUrl: string;
   fallbackUrl: string;
   metadata: Record<string, string>;
+  deepLink?: DeepLinkConfig;
   clickCount: number;
   installCount: number;
   trackingLink: string;
@@ -20,6 +27,7 @@ export interface CreateCampaignInput {
   androidUrl: string;
   fallbackUrl: string;
   metadata?: Record<string, string>;
+  deepLink?: DeepLinkConfig;
 }
 
 const BASE = '/api/v1';

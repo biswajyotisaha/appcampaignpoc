@@ -2,11 +2,12 @@ import { Router, Request, Response } from 'express';
 import * as campaignService from '../services/campaign.service';
 import { recordClick } from '../services/click.service';
 import { resolveRedirect } from '../services/redirect.service';
+import { renderDeepLinkPage } from '../services/deeplink-page.service';
 import { logger } from '../utils/logger';
 
 const router = Router();
 
-// GET /c/:slug - Record click and redirect to store
+// GET /c/:slug - Record click and redirect to store (or serve deep link interstitial)
 router.get('/:slug', async (req: Request, res: Response): Promise<void> => {
   const { slug } = req.params;
 
@@ -23,7 +24,7 @@ router.get('/:slug', async (req: Request, res: Response): Promise<void> => {
   const referer = req.headers['referer'] || null;
 
   // Resolve redirect target
-  const { url, device } = resolveRedirect(campaign, userAgent);
+  const { device, action } = resolveRedirect(campaign, userAgent);
 
   // Record the click asynchronously (don't block redirect)
   recordClick({
@@ -38,7 +39,16 @@ router.get('/:slug', async (req: Request, res: Response): Promise<void> => {
 
   logger.info({ slug, device, ip: ip.substring(0, 10) + '...' }, 'Click redirect');
 
-  res.redirect(302, url);
+  if (action.type === 'deeplink_page') {
+    // Serve HTML interstitial that tries to open app, falls back to store
+    const html = renderDeepLinkPage(action.context);
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.send(html);
+  } else {
+    // Standard 302 redirect to store
+    res.redirect(302, action.url);
+  }
 });
 
 export default router;

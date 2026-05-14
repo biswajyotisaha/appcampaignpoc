@@ -4,6 +4,12 @@ import * as campaignService from '../services/campaign.service';
 
 const router = Router();
 
+const deepLinkSchema = z.object({
+  iosScheme: z.string().max(100).regex(/^[a-zA-Z][a-zA-Z0-9+.-]*$/, 'Invalid URL scheme').optional(),
+  androidPackage: z.string().max(200).regex(/^[a-z][a-z0-9_]*(\.[a-z0-9_]+)+$/, 'Invalid package name').optional(),
+  deepLinkPath: z.string().max(500).optional(),
+}).optional();
+
 const createCampaignSchema = z.object({
   name: z.string().min(1).max(200),
   slug: z.string().min(1).max(100).regex(/^[a-z0-9-]+$/, 'Slug must be lowercase alphanumeric with hyphens'),
@@ -11,6 +17,7 @@ const createCampaignSchema = z.object({
   androidUrl: z.string().url(),
   fallbackUrl: z.string().url(),
   metadata: z.record(z.string()).optional(),
+  deepLink: deepLinkSchema,
 });
 
 const updateCampaignSchema = z.object({
@@ -20,6 +27,7 @@ const updateCampaignSchema = z.object({
   androidUrl: z.string().url().optional(),
   fallbackUrl: z.string().url().optional(),
   metadata: z.record(z.string()).optional(),
+  deepLink: deepLinkSchema,
 });
 
 // POST /api/v1/campaigns - Create campaign
