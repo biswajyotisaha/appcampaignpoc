@@ -1,6 +1,7 @@
 export const config = {
   port: parseInt(process.env.PORT || '3000', 10),
   nodeEnv: process.env.NODE_ENV || 'development',
+  databaseUrl: process.env.DATABASE_URL || '',
   attributionWindowHours: parseInt(process.env.ATTRIBUTION_WINDOW_HOURS || '24', 10),
   confidenceThresholds: {
     high: 1,    // hours
