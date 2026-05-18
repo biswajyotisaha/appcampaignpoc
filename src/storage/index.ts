@@ -25,8 +25,7 @@ export async function initializeStorage(): Promise<IStorage> {
 
 export function getStorage(): IStorage {
   if (!storage) {
-    // Fallback for sync access before initialization (shouldn't happen in normal flow)
-    storage = new MemoryStorage();
+    throw new Error('Storage not initialized. Call initializeStorage() before using getStorage().');
   }
   return storage;
 }

@@ -3,7 +3,6 @@ import { getStorage } from '../storage';
 import * as campaignService from '../services/campaign.service';
 
 const router = Router();
-const storage = getStorage();
 
 // GET /api/v1/stats/:campaignId - Get daily click/install stats for a campaign
 router.get('/:campaignId', async (req: Request, res: Response): Promise<void> => {
@@ -15,6 +14,7 @@ router.get('/:campaignId', async (req: Request, res: Response): Promise<void> =>
     return;
   }
 
+  const storage = getStorage();
   const dailyStats = await storage.getDailyStats(campaignId);
 
   res.json({

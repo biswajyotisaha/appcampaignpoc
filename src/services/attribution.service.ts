@@ -5,8 +5,6 @@ import { getCampaignById } from './campaign.service';
 import { getStorage } from '../storage';
 import { config } from '../config';
 
-const storage = getStorage();
-
 /**
  * Attempts to match a device's first launch to a prior campaign click.
  * Uses fingerprint (IP + normalized UA) and time-window matching.
@@ -48,6 +46,7 @@ export async function matchAttribution(request: AttributionRequest): Promise<Att
   const matchConfidence = getConfidence(deltaHours);
 
   // Increment install count for this campaign
+  const storage = getStorage();
   await storage.incrementInstallCount(campaign.id);
   await storage.recordInstallEvent(campaign.id, now);
 

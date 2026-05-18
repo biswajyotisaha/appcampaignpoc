@@ -5,8 +5,6 @@ import { generateId } from '../utils/id-generator';
 import { generateFingerprint } from './fingerprint.service';
 import { config } from '../config';
 
-const storage = getStorage();
-
 export interface RecordClickInput {
   campaignId: string;
   ip: string;
@@ -16,6 +14,7 @@ export interface RecordClickInput {
 }
 
 export async function recordClick(input: RecordClickInput): Promise<ClickRecord> {
+  const storage = getStorage();
   const fingerprint = generateFingerprint({ ip: input.ip, userAgent: input.userAgent });
   const now = new Date();
   const expiresAt = new Date(now.getTime() + config.attributionWindowHours * 60 * 60 * 1000);
@@ -40,5 +39,5 @@ export async function recordClick(input: RecordClickInput): Promise<ClickRecord>
 }
 
 export async function getClicksByFingerprint(fingerprint: string): Promise<ClickRecord[]> {
-  return storage.getClicksByFingerprint(fingerprint);
+  return getStorage().getClicksByFingerprint(fingerprint);
 }

@@ -2,9 +2,8 @@ import { Campaign, CreateCampaignDto, UpdateCampaignDto } from '../models/campai
 import { getStorage } from '../storage';
 import { generateId } from '../utils/id-generator';
 
-const storage = getStorage();
-
 export async function createCampaign(dto: CreateCampaignDto): Promise<Campaign> {
+  const storage = getStorage();
   // Check slug uniqueness
   const existing = await storage.getCampaignBySlug(dto.slug);
   if (existing) {
@@ -30,18 +29,19 @@ export async function createCampaign(dto: CreateCampaignDto): Promise<Campaign> 
 }
 
 export async function getCampaignById(id: string): Promise<Campaign | null> {
-  return storage.getCampaignById(id);
+  return getStorage().getCampaignById(id);
 }
 
 export async function getCampaignBySlug(slug: string): Promise<Campaign | null> {
-  return storage.getCampaignBySlug(slug);
+  return getStorage().getCampaignBySlug(slug);
 }
 
 export async function getAllCampaigns(): Promise<Campaign[]> {
-  return storage.getAllCampaigns();
+  return getStorage().getAllCampaigns();
 }
 
 export async function updateCampaign(id: string, dto: UpdateCampaignDto): Promise<Campaign | null> {
+  const storage = getStorage();
   // If updating slug, check uniqueness
   if (dto.slug) {
     const existing = await storage.getCampaignBySlug(dto.slug);
@@ -54,5 +54,5 @@ export async function updateCampaign(id: string, dto: UpdateCampaignDto): Promis
 }
 
 export async function deleteCampaign(id: string): Promise<boolean> {
-  return storage.deleteCampaign(id);
+  return getStorage().deleteCampaign(id);
 }
