@@ -229,6 +229,45 @@ export class PostgresStorage implements IStorage {
     return click;
   }
 
+  /**
+   * Atomic dedup: inserts click + increments campaign count ONLY if
+   * no click from same fingerprint + campaign exists within last 30 seconds.
+   * Returns true if inserted, false if duplicate was blocked.
+   */
+  async createClickIfNotDuplicate(click: ClickRecord): Promise<boolean> {
+    const result = await this.pool.query(
+      `INSERT INTO clicks (id, campaign_id, fingerprint, ip, user_agent, device, referer, clicked_at, expires_at, consumed)
+       SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
+       WHERE NOT EXISTS (
+         SELECT 1 FROM clicks
+         WHERE fingerprint = $3
+           AND campaign_id = $2
+           AND clicked_at > NOW() - INTERVAL '10 seconds'
+       )`,
+      [
+        click.id,
+        click.campaignId,
+        click.fingerprint,
+        click.ip,
+        click.userAgent,
+        click.device,
+        click.referer,
+        click.clickedAt,
+        click.expiresAt,
+        click.consumed,
+      ]
+    );
+
+    const inserted = (result.rowCount ?? 0) > 0;
+    if (inserted) {
+      await this.pool.query(
+        'UPDATE campaigns SET click_count = click_count + 1, updated_at = NOW() WHERE id = $1',
+        [click.campaignId]
+      );
+    }
+    return inserted;
+  }
+
   async getClicksByFingerprint(fingerprint: string): Promise<ClickRecord[]> {
     const result = await this.pool.query(
       'SELECT * FROM clicks WHERE fingerprint = $1',

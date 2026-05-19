@@ -123,6 +123,23 @@ export class MemoryStorage implements IStorage {
     return click;
   }
 
+  async createClickIfNotDuplicate(click: ClickRecord): Promise<boolean> {
+    const now = Date.now();
+    const ids = this.clicksByFingerprint.get(click.fingerprint) || [];
+    const hasDuplicate = ids.some(id => {
+      const existing = this.clicks.get(id);
+      return existing &&
+        existing.campaignId === click.campaignId &&
+        (now - existing.clickedAt.getTime()) < 10_000;
+    });
+
+    if (hasDuplicate) return false;
+
+    await this.createClick(click);
+    await this.incrementClickCount(click.campaignId);
+    return true;
+  }
+
   async getClicksByFingerprint(fingerprint: string): Promise<ClickRecord[]> {
     const ids = this.clicksByFingerprint.get(fingerprint) || [];
     const clicks: ClickRecord[] = [];

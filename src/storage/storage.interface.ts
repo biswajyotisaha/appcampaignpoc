@@ -38,6 +38,7 @@ export interface IStorage {
 
   // Clicks
   createClick(click: ClickRecord): Promise<ClickRecord>;
+  createClickIfNotDuplicate(click: ClickRecord): Promise<boolean>; // atomic: insert + increment only if no same fingerprint+campaign within 30s
   getClicksByFingerprint(fingerprint: string): Promise<ClickRecord[]>;
   getClicksByCampaignId(campaignId: string): Promise<ClickRecord[]>;
   markClickConsumed(clickId: string): Promise<void>;
