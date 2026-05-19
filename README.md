@@ -49,7 +49,7 @@ This server acts as a middleman that **remembers** who clicked what:
 
 1. **Click Time:** Records a fingerprint (SHA-256 of IP + device type + device model) along with campaign parameters. Bot/prefetch requests are detected and silently ignored.
 2. **Open/Install Time:** If deep linking is configured, tries to open the app directly — otherwise redirects to the store
-3. **Attribution Match:** The app calls the match API on launch with its `bundleId` — server compares fingerprints (exact first, loose fallback if needed) and returns campaign context (one-shot, consumed after first match)
+3. **Attribution Match:** The app calls the match API on launch with its `bundleId` — server detects platform from UA (CFNetwork/Darwin → iOS, OkHttp/Dalvik → Android), compares fingerprints (exact first, loose fallback if needed), and returns campaign context (one-shot, consumed after first match)
 4. **Active User Tracking:** Every match call records a unique daily app launch per platform + bundleId, classified as organic (no campaign match) or non-organic (matched to a campaign). If a previously organic user gets matched later, they're upgraded to non-organic.
 
 ### Fingerprint Matching (Dual-Layer)
@@ -66,14 +66,21 @@ Since we can't use cookies or URL parameters across the App Store boundary, we u
 │                                                                                     │
 │  formula = SHA256("IP | device_type | device_model")                               │
 │                                                                                     │
-│  Click (Safari):         App (native URLSession):                                  │
-│  IP: 203.0.113.42        IP: 203.0.113.42                                          │
-│  UA: iPhone/iOS Safari   UA: MyApp/1 CFNetwork/Darwin                              │
-│  → type: ios             → type: ios (CFNetwork/Darwin detected)                   │
-│  → model: iphone         → model: unknown (not exposed by native UA)              │
+│  ┌─ iOS Example ─────────────────────────────────────────────────────────┐         │
+│  │  Click (Safari):         App (native URLSession):                      │         │
+│  │  UA: iPhone/iOS Safari   UA: MyApp/1 CFNetwork/Darwin                  │         │
+│  │  → type: ios             → type: ios (CFNetwork/Darwin detected)       │         │
+│  │  → model: iphone         → model: unknown                             │         │
+│  │  SHA256("IP|ios|iphone") ≠ SHA256("IP|ios|unknown") → MISMATCH        │         │
+│  └────────────────────────────────────────────────────────────────────────┘         │
 │                                                                                     │
-│  SHA256("203.0.113.42|ios|iphone") ≠ SHA256("203.0.113.42|ios|unknown")           │
-│  → MISMATCH (model differs between browser and native app)                         │
+│  ┌─ Android Example (Chrome UA Reduction) ────────────────────────────────┐        │
+│  │  Click (Chrome 110+):    App (OkHttp/Dalvik):                          │        │
+│  │  UA: Android 10; K       UA: okhttp/4.12.0                             │        │
+│  │  → type: android         → type: android (OkHttp detected)             │        │
+│  │  → model: K              → model: K (normalized to match Chrome)       │        │
+│  │  SHA256("IP|android|k") = SHA256("IP|android|k") → EXACT MATCH!       │        │
+│  └────────────────────────────────────────────────────────────────────────┘        │
 │                                                                                     │
 │  ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─          │
 │                                                                                     │
@@ -94,9 +101,13 @@ Since we can't use cookies or URL parameters across the App Store boundary, we u
 │                                                                                     │
 │  • Chrome UA Reduction: Browser reports "Android 10; K" but app reports            │
 │    "Android 16; Pixel 8 Pro" — same device, different model strings                │
+│    (OkHttp model normalized to "K" for exact match with Chrome)                    │
 │                                                                                     │
 │  • Native iOS apps: URLSession sends "CFNetwork/Darwin" (no model)                 │
 │    while Safari sends full "iPhone; CPU iPhone OS 18_7..." User-Agent              │
+│                                                                                     │
+│  • Native Android apps: OkHttp sends "okhttp/4.12.0" (no OS info)                 │
+│    → detected as Android, model normalized to "K" (Chrome UA Reduction)            │
 │                                                                                     │
 │  • Exact fingerprint still used for click DEDUP (same browser context)             │
 │                                                                                     │
@@ -247,7 +258,7 @@ Since we can't use cookies or URL parameters across the App Store boundary, we u
 │   Parse User-Agent:                                                              │
 │   • Safari/Chrome → type: "ios" or "android"                                    │
 │   • CFNetwork/Darwin → type: "ios" (native iOS app detected)                    │
-│   • OkHttp/Volley → type: "android" (native Android app)                        │
+│   • OkHttp/Dalvik → type: "android", model → "K" (Chrome UA Reduction match)   │
 │         │                                                                         │
 │         ▼                                                                         │
 │   LAYER 1: Exact fingerprint                                                    │
@@ -339,6 +350,7 @@ Since we can't use cookies or URL parameters across the App Store boundary, we u
 │                                                                                   │
 │  stats.routes ─────────► storage.getActiveUserStats(filter?)                     │
 │  (?platform&bundleId) ├─► storage.getRegisteredApps()                            │
+│                     ├──► storage.getRegisteredPlatforms()                         │
 │                     └──► storage.getDailyStats()                                 │
 │                                                                                   │
 └─────────────────────────────────────────────────────────────────────────────────┘
@@ -387,7 +399,7 @@ appcampaignpoc/
 │   │   └── request-logger.ts     # Structured request logging
 │   └── utils/
 │       ├── logger.ts             # Pino logger
-│       ├── ua-parser.ts          # User-Agent parsing (iOS/Android/CFNetwork detection)
+│       ├── ua-parser.ts          # User-Agent parsing (iOS/Android/CFNetwork/OkHttp detection)
 │       └── id-generator.ts       # UUID generation
 └── web/                          # --- FRONTEND (React + Vite + Tailwind) ---
     ├── package.json
@@ -421,6 +433,7 @@ appcampaignpoc/
 | Dual-layer fingerprinting | Exact (`IP+type+model`) for click dedup; loose (`IP+device`) fallback for attribution when models differ (Chrome UA Reduction, native app UAs) |
 | SHA-256 hash | Privacy (no raw IP+UA stored together), fast O(1) lookups by fingerprint |
 | CFNetwork/Darwin detection | Native iOS apps send CFNetwork UA — must be classified as "ios" to match browser clicks |
+| OkHttp/Dalvik detection + model normalization | Native Android apps send "okhttp/4.12.0" — classified as "android" with model set to "K" to match Chrome UA Reduction for exact fingerprint matching |
 | Bot/prefetch detection on clicks | Social media unfurlers, email security scanners, and CLI tools inflate click counts; silently skipped |
 | Advisory locks (pg_advisory_xact_lock) | Race-safe click dedup — prevents double-counting from concurrent requests hitting different server instances |
 | 10-second click dedup window | Same fingerprint + campaign within 10s = duplicate (covers browser prefetch + real click) |
@@ -794,7 +807,7 @@ Response:
 GET /api/v1/stats/apps
 ```
 
-Returns the list of apps that have sent attribution match calls (with bundleId) in the last 30 days. Used to populate filter dropdowns.
+Returns the list of apps that have sent attribution match calls (with bundleId) in the last 30 days, plus all registered platforms (even those without bundleId). Used to populate filter dropdowns.
 
 Response:
 ```json
@@ -802,9 +815,12 @@ Response:
   "apps": [
     { "platform": "ios", "bundleId": "com.lilly.myapp" },
     { "platform": "android", "bundleId": "com.lilly.myapp" }
-  ]
+  ],
+  "platforms": ["android", "ios"]
 }
 ```
+
+**Note:** `platforms` includes ALL platforms that have sent any attribution call (even without bundleId), while `apps` only includes entries where bundleId was provided. This ensures the platform filter dropdown shows all platforms even if some app launches didn't include a bundleId.
 
 ---
 
@@ -1105,6 +1121,7 @@ The `render.yaml` configures:
 - [x] Race-safe click dedup with advisory locks
 - [x] Dual-layer fingerprinting (exact + loose fallback)
 - [x] Native iOS app UA detection (CFNetwork/Darwin)
+- [x] Native Android app UA detection (OkHttp/Dalvik + Chrome UA Reduction model normalization)
 - [ ] Authentication for campaign management APIs
 - [ ] Webhook notifications on attribution match
 - [ ] SDK packages for iOS/Android integration
