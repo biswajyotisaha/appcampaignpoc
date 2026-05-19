@@ -1,6 +1,6 @@
 # LillyTrack
 
-A lightweight, self-hosted campaign attribution and active user tracking server inspired by AppsFlyer. It tracks which ad/campaign link a user clicked, redirects them to the appropriate app store (or opens the app directly via deep linking), matches app launches to campaign clicks via fingerprinting, and provides a real-time dashboard with active user analytics.
+A lightweight, self-hosted campaign attribution and active user tracking server inspired by AppsFlyer. It tracks which ad/campaign link a user clicked, redirects them to the appropriate app store (or opens the app directly via deep linking), matches app launches to campaign clicks via fingerprinting, and provides a real-time dashboard with per-app active user analytics.
 
 ## How It Works
 
@@ -13,26 +13,29 @@ A lightweight, self-hosted campaign attribution and active user tracking server 
 │  ─────────                    ─────────────────             ────────               │
 │                                                                                     │
 │  User clicks                 Deep link tries app first,    App calls API            │
-│  campaign link               falls back to store           on launch                │
+│  campaign link               falls back to store           on every launch          │
 │       │                              │                          │                   │
 │       ▼                              │                          ▼                   │
 │  ┌──────────┐                        │                   ┌─────────────┐           │
 │  │  Server  │ Records:               │                   │   Server    │           │
 │  │          │ • Fingerprint           │                   │   matches   │           │
-│  │          │   (IP + UA hash)        │                   │   fingerprint│          │
-│  │          │ • Timestamp             │                   │   to click  │           │
-│  │          │ • Campaign ID           │                   │             │           │
-│  └────┬─────┘                        │                   └──────┬──────┘           │
-│       │                              │                          │                   │
-│       ▼                              │                          ▼                   │
-│  Deep Link configured?               │                   Returns campaign           │
-│  ├─ YES → Interstitial page          │                   metadata + marks           │
-│  │         tries app:// scheme        │                   click consumed             │
-│  │         (falls back to store)      │                   (one-shot)                │
+│  │          │   SHA256(IP+type+model) │                   │   via exact │           │
+│  │          │ • Timestamp             │                   │   or loose  │           │
+│  │          │ • Campaign ID           │                   │   fallback  │           │
+│  │          │                         │                   │             │           │
+│  │  Bot/prefetch detection:           │                   └──────┬──────┘           │
+│  │  Skips bots, scanners,             │                          │                   │
+│  │  social unfurlers, email           │                          ▼                   │
+│  │  security crawlers                 │                   Returns campaign           │
+│  └────┬─────┘                        │                   metadata + marks           │
+│       │                              │                   click consumed             │
+│       ▼                              │                   (one-shot)                │
+│  Deep Link configured?               │                                             │
+│  ├─ YES → Interstitial page          │                   Also records app launch    │
+│  │         tries app:// scheme        │                   with platform + bundleId   │
+│  │         (falls back to store)      │                   for per-app analytics      │
 │  └─ NO  → 302 redirect to store      │                                             │
-│                                       │                   Also records app launch    │
-│                                       │                   for active user tracking   │
-│                                                                                     │
+│                                       │                                             │
 └────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -44,25 +47,63 @@ When a user clicks an ad and gets redirected to the App Store, the connection be
 
 This server acts as a middleman that **remembers** who clicked what:
 
-1. **Click Time:** Records a fingerprint (hash of IP + device info) along with campaign parameters
+1. **Click Time:** Records a fingerprint (SHA-256 of IP + device type + device model) along with campaign parameters. Bot/prefetch requests are detected and silently ignored.
 2. **Open/Install Time:** If deep linking is configured, tries to open the app directly — otherwise redirects to the store
-3. **Attribution Match:** The app calls the match API on launch — server compares fingerprints and returns campaign context (one-shot, consumed after first match)
-4. **Active User Tracking:** Every match call records a unique daily app launch, classified as organic (no campaign match) or non-organic (matched to a campaign)
+3. **Attribution Match:** The app calls the match API on launch with its `bundleId` — server compares fingerprints (exact first, loose fallback if needed) and returns campaign context (one-shot, consumed after first match)
+4. **Active User Tracking:** Every match call records a unique daily app launch per platform + bundleId, classified as organic (no campaign match) or non-organic (matched to a campaign). If a previously organic user gets matched later, they're upgraded to non-organic.
 
-### Fingerprint Matching
+### Fingerprint Matching (Dual-Layer)
 
-Since we can't use cookies or URL parameters across the App Store boundary, we use **device fingerprinting**:
+Since we can't use cookies or URL parameters across the App Store boundary, we use **device fingerprinting** with a two-tier approach:
 
 ```
-CLICK TIME:                          APP LAUNCH TIME:
-  IP: 203.0.113.42                     IP: 203.0.113.42
-  UA: iPhone/iOS 18.7                  UA: iPhone/iOS 18.7
-  Time: 10:30:00                       Time: 10:31:15
-
-  fingerprint = SHA256("203.0.113.42|ios|ios|18.7|iphone")
-
-  Same fingerprint + within 24h window = MATCH
-  Click is then CONSUMED (won't match again)
+┌────────────────────────────────────────────────────────────────────────────────────┐
+│                        DUAL-LAYER FINGERPRINT MATCHING                               │
+├────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                     │
+│  LAYER 1: EXACT FINGERPRINT                                                        │
+│  ──────────────────────────                                                        │
+│                                                                                     │
+│  formula = SHA256("IP | device_type | device_model")                               │
+│                                                                                     │
+│  Click (Safari):         App (native URLSession):                                  │
+│  IP: 203.0.113.42        IP: 203.0.113.42                                          │
+│  UA: iPhone/iOS Safari   UA: MyApp/1 CFNetwork/Darwin                              │
+│  → type: ios             → type: ios (CFNetwork/Darwin detected)                   │
+│  → model: iphone         → model: unknown (not exposed by native UA)              │
+│                                                                                     │
+│  SHA256("203.0.113.42|ios|iphone") ≠ SHA256("203.0.113.42|ios|unknown")           │
+│  → MISMATCH (model differs between browser and native app)                         │
+│                                                                                     │
+│  ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─          │
+│                                                                                     │
+│  LAYER 2: LOOSE FALLBACK (when exact fails)                                        │
+│  ──────────────────────────────────────────                                        │
+│                                                                                     │
+│  Searches clicks table: WHERE ip = ? AND device = ?                                │
+│                                                                                     │
+│  Click record:           App request:                                               │
+│  ip: 203.0.113.42        ip: 203.0.113.42                                          │
+│  device: "ios"           parsed.type: "ios"                                        │
+│                                                                                     │
+│  IP matches + device type matches → MATCH!                                          │
+│                                                                                     │
+│  ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─          │
+│                                                                                     │
+│  WHY TWO LAYERS?                                                                   │
+│                                                                                     │
+│  • Chrome UA Reduction: Browser reports "Android 10; K" but app reports            │
+│    "Android 16; Pixel 8 Pro" — same device, different model strings                │
+│                                                                                     │
+│  • Native iOS apps: URLSession sends "CFNetwork/Darwin" (no model)                 │
+│    while Safari sends full "iPhone; CPU iPhone OS 18_7..." User-Agent              │
+│                                                                                     │
+│  • Exact fingerprint still used for click DEDUP (same browser context)             │
+│                                                                                     │
+│  DEDUP: Same fingerprint + same campaign within 10 seconds → blocked               │
+│  (uses PostgreSQL advisory locks for race-safe serialization)                      │
+│                                                                                     │
+└────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -76,10 +117,10 @@ CLICK TIME:                          APP LAUNCH TIME:
 │  ┌─────────────────────────────────────────────────────────────────────────┐     │
 │  │                    Express Server (port 10000)                            │     │
 │  │                                                                           │     │
-│  │  /c/:slug                → Click Handler (deep link or redirect)         │     │
+│  │  /c/:slug                → Click Handler (bot detect + deep link/redirect)│     │
 │  │  /api/v1/campaigns       → Campaign CRUD (with deep link config)         │     │
 │  │  /api/v1/attribution     → Attribution Match + App Launch Recording      │     │
-│  │  /api/v1/stats           → Analytics API (campaign + active users)       │     │
+│  │  /api/v1/stats           → Analytics API (campaign + active users + apps)│     │
 │  │  /health                 → Health Check                                  │     │
 │  │  /*                      → React Dashboard (LillyTrack)                  │     │
 │  └─────────────────────────────────────────────────────────────────────────┘     │
@@ -87,9 +128,9 @@ CLICK TIME:                          APP LAUNCH TIME:
 │  ┌────────────────────┐  ┌──────────────────────────────────────────────┐       │
 │  │  web-dist/          │  │  PostgreSQL (Render managed)                  │       │
 │  │  (React SPA)        │  │  • campaigns                                  │       │
-│  │                     │  │  • clicks (by id, by fingerprint)             │       │
+│  │                     │  │  • clicks (by id, by fingerprint, by ip+dev)  │       │
 │  │                     │  │  • install_events (daily aggregates)           │       │
-│  │                     │  │  • app_launches (active user tracking)         │       │
+│  │                     │  │  • app_launches (per-app active user tracking)│       │
 │  └────────────────────┘  └──────────────────────────────────────────────┘       │
 │                                                                                   │
 │  ┌──────────────────────────────────────────────────────────────────────────┐    │
@@ -127,6 +168,8 @@ CLICK TIME:                          APP LAUNCH TIME:
 │  ip          VARCHAR(45)                                                         │
 │  is_organic  BOOLEAN                                                             │
 │  campaign_id VARCHAR(36)                                                         │
+│  platform    VARCHAR(10)            ← ios | android | other                      │
+│  bundle_id   VARCHAR(200)           ← com.example.myapp                          │
 │  launched_at TIMESTAMPTZ                                                         │
 │                                                                                   │
 └─────────────────────────────────────────────────────────────────────────────────┘
@@ -141,6 +184,15 @@ CLICK TIME:                          APP LAUNCH TIME:
 │                                                                                   │
 │                         GET /c/:slug                                              │
 │                              │                                                    │
+│                              ▼                                                    │
+│                     isPrefetchOrBot()?                                            │
+│                       /           \                                               │
+│                     YES             NO                                            │
+│                     /                 \                                           │
+│              Skip recording         Record click                                 │
+│              (still redirect)       (10s dedup + advisory lock)                  │
+│                     \                 /                                           │
+│                      └───────┬───────┘                                           │
 │                              ▼                                                    │
 │                   Campaign has deepLink config?                                   │
 │                     /              \                                              │
@@ -184,48 +236,67 @@ CLICK TIME:                          APP LAUNCH TIME:
 ├─────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                   │
 │   POST /api/v1/attribution/match                                                 │
+│   Body: { "bundleId": "com.example.app" }                                       │
 │   (called by app on every launch)                                                │
 │         │                                                                         │
 │         ▼                                                                         │
-│   Generate fingerprint from                                                      │
-│   request IP + User-Agent                                                        │
-│   hash = SHA256("{ip}|{os}|{osVersion}|{deviceModel}")                          │
+│   Auto-detect IP (x-forwarded-for) + User-Agent from headers                    │
+│   Extract bundleId from body (for per-app tracking)                              │
 │         │                                                                         │
 │         ▼                                                                         │
-│   Find clicks with same fingerprint                                              │
+│   Parse User-Agent:                                                              │
+│   • Safari/Chrome → type: "ios" or "android"                                    │
+│   • CFNetwork/Darwin → type: "ios" (native iOS app detected)                    │
+│   • OkHttp/Volley → type: "android" (native Android app)                        │
 │         │                                                                         │
 │         ▼                                                                         │
-│   Filter: unconsumed + not expired + clicked before now                          │
+│   LAYER 1: Exact fingerprint                                                    │
+│   SHA256("{ip}|{type}|{model}")                                                 │
+│   → Search clicks by fingerprint                                                │
 │         │                                                                         │
 │     ┌───┴───┐                                                                    │
 │     │       │                                                                    │
-│  No valid  Valid clicks found                                                    │
-│  clicks    │                                                                     │
-│     │      ▼                                                                     │
-│     │   Pick most recent valid click                                             │
-│     │      │                                                                     │
-│     │      ▼                                                                     │
-│     │   Calculate confidence:                                                    │
-│     │   • < 1h  = "high"                                                         │
-│     │   • 1-6h  = "medium"                                                       │
-│     │   • 6-24h = "low"                                                          │
-│     │      │                                                                     │
-│     │      ▼                                                                     │
-│     │   Mark click as CONSUMED                                                   │
+│  Clicks   No clicks                                                              │
+│  found    found                                                                  │
+│     │       │                                                                    │
+│     │       ▼                                                                    │
+│     │   LAYER 2: Loose fallback                                                  │
+│     │   Search clicks WHERE ip = ? AND device = ?                                │
+│     │       │                                                                    │
+│     │   ┌───┴───┐                                                                │
+│     │   │       │                                                                │
+│     │  Clicks  No clicks → { matched: false }                                   │
+│     │  found       │                                                             │
+│     │   │          │                                                             │
+│     └───┤          │                                                             │
+│         ▼          │                                                             │
+│   Filter: unconsumed + not expired + clicked before now                          │
+│         │          │                                                             │
+│     ┌───┴───┐     │                                                             │
+│     │       │     │                                                             │
+│  No valid  Valid   │                                                             │
+│  clicks    clicks  │                                                             │
+│     │       │     │                                                             │
+│     │       ▼     │                                                             │
+│     │   Pick most recent                                                         │
+│     │   Calculate confidence (high/medium/low)                                   │
+│     │   Mark click CONSUMED                                                      │
 │     │   Increment install count                                                  │
-│     │   Record install event                                                     │
-│     │      │                                                                     │
-│     ▼      ▼                                                                     │
+│     │       │     │                                                             │
+│     ▼       ▼     │                                                             │
 │  ORGANIC   NON-ORGANIC                                                           │
-│     │      │                                                                     │
-│     └──┬───┘                                                                     │
-│        ▼                                                                         │
+│     │       │     │                                                             │
+│     └───┬───┘     │                                                             │
+│         ▼         │                                                             │
 │   Record app launch (one per device per day)                                     │
 │   • fingerprint + ip + is_organic + campaign_id                                  │
+│   • platform (ios/android/other) + bundleId                                      │
 │   • Purges entries older than 30 days                                            │
-│   • Deduplicates: max 1 record per fingerprint per calendar day                  │
-│        │                                                                         │
-│        ▼                                                                         │
+│   • Dedup: 1 record per fingerprint per calendar day                             │
+│   • UPGRADE: If same-day organic record exists and this is                       │
+│     non-organic → upgrades existing record to non-organic                        │
+│         │                                                                         │
+│         ▼                                                                         │
 │   Return response to app                                                         │
 │   { matched: true/false, attribution: { ... } | null }                           │
 │                                                                                   │
@@ -250,22 +321,24 @@ CLICK TIME:                          APP LAUNCH TIME:
 │  (Zod validation)        (CRUD + slug uniqueness)     interface                  │
 │                                                        │                          │
 │  click.routes ─────────► redirect.service             ├── PostgresStorage        │
-│  (UA extraction)         (device detect + action)     │   (production)           │
+│  (isPrefetchOrBot()!)     (device detect + action)     │   (advisory locks)      │
 │                     ├──► click.service                 └── MemoryStorage          │
-│                     │    (record + fingerprint)            (local dev)            │
+│                     │    (record + dedup)                  (local dev)            │
 │                     └──► deeplink-page.service                                   │
 │                          (HTML renderer)                                          │
 │                                                                                   │
 │  attribution.routes ───► attribution.service                                     │
-│  (header extraction)     (match + consume + score)                               │
-│                     ├──► fingerprint.service                                     │
-│                     │    (SHA-256 hash generation)                                │
+│  (auto-detect headers)   (exact match → loose fallback)                          │
+│  (extract bundleId)  ├──► fingerprint.service                                    │
+│                     │    • generateFingerprint(IP+type+model)                    │
+│                     │    • generateLooseFingerprint(IP+type)                     │
 │                     ├──► click.service                                            │
-│                     │    (lookup by fingerprint)                                  │
+│                     │    (lookup by fingerprint or IP+device)                    │
 │                     └──► storage.recordAppLaunch()                               │
-│                          (active user tracking)                                   │
+│                          (platform + bundleId + organic upgrade)                  │
 │                                                                                   │
-│  stats.routes ─────────► storage.getActiveUserStats()                            │
+│  stats.routes ─────────► storage.getActiveUserStats(filter?)                     │
+│  (?platform&bundleId) ├─► storage.getRegisteredApps()                            │
 │                     └──► storage.getDailyStats()                                 │
 │                                                                                   │
 └─────────────────────────────────────────────────────────────────────────────────┘
@@ -293,28 +366,28 @@ appcampaignpoc/
 │   │   └── attribution.model.ts  # Attribution result interface
 │   ├── storage/
 │   │   ├── storage.interface.ts  # IStorage contract (campaigns + clicks + active users)
-│   │   ├── postgres.storage.ts   # PostgreSQL implementation (production)
+│   │   ├── postgres.storage.ts   # PostgreSQL implementation (advisory locks, migrations)
 │   │   ├── memory.storage.ts     # In-memory Map implementation (local dev)
 │   │   └── index.ts              # Storage factory (auto-selects by DATABASE_URL)
 │   ├── services/
-│   │   ├── fingerprint.service.ts  # SHA-256 hashing + UA normalization
+│   │   ├── fingerprint.service.ts  # SHA-256 exact + loose fingerprint generation
 │   │   ├── redirect.service.ts     # Device detection + deep link resolution
 │   │   ├── deeplink-page.service.ts # HTML interstitial page renderer
 │   │   ├── campaign.service.ts     # Campaign CRUD logic
-│   │   ├── click.service.ts        # Click recording + lookup
-│   │   └── attribution.service.ts  # Fingerprint matching + confidence scoring
+│   │   ├── click.service.ts        # Click recording + dedup
+│   │   └── attribution.service.ts  # Dual-layer fingerprint matching + scoring
 │   ├── routes/
 │   │   ├── health.routes.ts      # GET /health
 │   │   ├── campaign.routes.ts    # CRUD /api/v1/campaigns (Zod validated)
-│   │   ├── click.routes.ts       # GET /c/:slug (deep link or redirect)
+│   │   ├── click.routes.ts       # GET /c/:slug (bot detect + deep link/redirect)
 │   │   ├── attribution.routes.ts # POST /api/v1/attribution/match + app launch recording
-│   │   └── stats.routes.ts       # GET/DELETE /api/v1/stats/active-users + GET /:campaignId
+│   │   └── stats.routes.ts       # GET/DELETE /api/v1/stats/active-users + apps + /:campaignId
 │   ├── middleware/
 │   │   ├── error-handler.ts      # Global error handling
 │   │   └── request-logger.ts     # Structured request logging
 │   └── utils/
 │       ├── logger.ts             # Pino logger
-│       ├── ua-parser.ts          # User-Agent parsing + device detection
+│       ├── ua-parser.ts          # User-Agent parsing (iOS/Android/CFNetwork detection)
 │       └── id-generator.ts       # UUID generation
 └── web/                          # --- FRONTEND (React + Vite + Tailwind) ---
     ├── package.json
@@ -326,14 +399,15 @@ appcampaignpoc/
     └── src/
         ├── main.tsx              # React entry point
         ├── App.tsx               # Root layout (sidebar + page routing)
-        ├── Sidebar.tsx           # Left navigation (Home / Campaigns)
-        ├── HomePage.tsx          # Active user stats + charts + Clear All Data
-        ├── ActiveUsersChart.tsx   # Dual line charts (daily users + organic/non-organic)
+        ├── Sidebar.tsx           # Left navigation (Home / Campaigns / Settings)
+        ├── HomePage.tsx          # Active user stats + platform/app filter dropdowns
+        ├── ActiveUsersChart.tsx   # Dual bar charts (daily users + organic/non-organic)
         ├── CampaignsPage.tsx     # Campaign CRUD + analytics with dropdown selector
         ├── CampaignForm.tsx      # Create campaign form (with deep link config)
         ├── CampaignList.tsx      # Campaign cards + integration guide
         ├── CampaignChart.tsx     # Per-campaign analytics chart (Recharts)
-        ├── api.ts                # API client (campaigns + stats + active users)
+        ├── SettingsPage.tsx      # Data management (Clear All Data)
+        ├── api.ts                # API client (campaigns + stats + active users + apps)
         ├── index.css             # Tailwind base styles
         └── vite-env.d.ts         # Vite type declarations
 ```
@@ -344,30 +418,36 @@ appcampaignpoc/
 |----------|-----------|
 | PostgreSQL persistent storage | Survives redeploys, free tier on Render, proper indexing |
 | Interface-based storage (IStorage) | Swap between PostgreSQL (prod) and in-memory (dev) without touching business logic |
-| SHA-256 fingerprint hash | Privacy (no raw IP+UA stored together), fast O(1) lookups |
-| Normalized UA for fingerprinting | `"{ip}\|{os}\|{osVersion}\|{deviceModel}"` — strips browser version changes between click and app |
+| Dual-layer fingerprinting | Exact (`IP+type+model`) for click dedup; loose (`IP+device`) fallback for attribution when models differ (Chrome UA Reduction, native app UAs) |
+| SHA-256 hash | Privacy (no raw IP+UA stored together), fast O(1) lookups by fingerprint |
+| CFNetwork/Darwin detection | Native iOS apps send CFNetwork UA — must be classified as "ios" to match browser clicks |
+| Bot/prefetch detection on clicks | Social media unfurlers, email security scanners, and CLI tools inflate click counts; silently skipped |
+| Advisory locks (pg_advisory_xact_lock) | Race-safe click dedup — prevents double-counting from concurrent requests hitting different server instances |
+| 10-second click dedup window | Same fingerprint + campaign within 10s = duplicate (covers browser prefetch + real click) |
 | 24-hour attribution window | Industry standard, configurable via env var |
 | One-shot attribution (click consumed) | Prevents duplicate install counts; user must click again for new attribution |
+| Per-app tracking via bundleId | App sends its bundle identifier; stats filterable per-app and per-platform |
+| Organic-to-non-organic upgrade | If device was recorded as organic today, then matches a campaign later → upgraded to non-organic |
 | Active user dedup (1 per device/day) | Tracks unique daily users, not raw launch count |
 | 30-day rolling window | Active user data auto-purges on each insert |
 | campaign_id as VARCHAR in app_launches | No FK — data survives campaign deletion |
+| platform + bundle_id columns | Enable per-app per-platform filtering without breaking old data (DEFAULT 'other' / NULL) |
 | Interstitial page for deep links | Can't 302 to custom schemes; HTML page handles app-open attempt + fallback |
 | Intent URI for Android | Native browser handling: opens app if installed, falls back to Play Store |
-| State-based page routing (no react-router) | Minimal deps, simple two-page app |
+| State-based page routing (no react-router) | Minimal deps, simple three-page app |
 | Auto-detect base URL from request | No manual config needed — works on any domain |
-| Async click recording | Non-blocking — doesn't delay the redirect/page response |
 
 ---
 
 ## Dashboard UI
 
-The LillyTrack dashboard is a two-page React SPA with a sidebar navigation:
+The LillyTrack dashboard is a three-page React SPA with a dark navy sidebar navigation:
 
 ### Home Page
+- **Platform & App filter dropdowns** — Filter all stats by OS (iOS/Android) and specific app (bundleId)
 - **3 stat cards** — Total Active Users (30d), Non-Organic Launches, Organic Launches
-- **Daily Active Users chart** — Line chart showing unique users over 30 days
-- **Organic vs Non-Organic chart** — Dual line chart comparing launch sources
-- **Clear All Data button** — Truncates ALL tables (campaigns, clicks, installs, app launches) for a fresh start
+- **Daily Active Users bar chart** — Blue bars showing unique users over 30 days
+- **Organic vs Non-Organic bar chart** — Stacked green (organic) + blue (non-organic) bars
 
 ### Campaigns Page
 - **Campaign analytics chart** — always visible at top with dropdown to switch between campaigns
@@ -377,8 +457,11 @@ The LillyTrack dashboard is a two-page React SPA with a sidebar navigation:
 - **Fixed metadata fields** — Source and Topic inputs
 - **Copy tracking links** to clipboard with one click
 - **View click & install counts** per campaign
-- **Mobile integration guide** — per-campaign code snippets (JavaScript + Swift)
+- **Mobile integration guide** — per-campaign code snippets (JavaScript + Swift + Kotlin)
 - **Delete campaigns** with confirmation
+
+### Settings Page
+- **Clear All Data** — Destructive action with confirmation dialog. Truncates ALL tables (campaigns, clicks, installs, app launches) for a complete reset.
 
 In production, the dashboard is served by the same Express server at the root URL (`/`).
 In development, run the Vite dev server separately on port 5173 (it proxies API calls to port 3000).
@@ -566,8 +649,14 @@ GET /c/:slug
 
 This is the link you distribute in ads. When opened:
 1. Server detects device type from User-Agent
-2. Records a click fingerprint (async, non-blocking)
-3. Determines action based on deep link config:
+2. **Bot detection** — Skips click recording for:
+   - Prefetch/preview headers (`Purpose`, `Sec-Purpose`, `X-Purpose`)
+   - Social media link unfurlers (Slack, Twitter, Facebook, LinkedIn, WhatsApp, Telegram, Discord)
+   - Email security scanners (Outlook SafeLinks, Google Safety, Barracuda)
+   - CLI tools (wget, curl, Python-requests, Java, Go-http)
+   - Empty or very short User-Agent strings (< 10 chars)
+3. **Click recording** (real users only) — Fingerprint generated, checked against 10-second dedup window using advisory locks. If duplicate, silently skipped.
+4. Determines action based on deep link config:
 
 **Without deep link config** — standard redirect:
 
@@ -594,13 +683,15 @@ POST /api/v1/attribution/match
 Content-Type: application/json
 ```
 
-Called by your app on launch to retrieve campaign context. Also records the app launch for active user tracking.
+Called by your app on every launch to retrieve campaign context. Also records the app launch for active user tracking with per-app filtering.
 
-The server automatically detects the device's IP and User-Agent from request headers — the request body can be empty or optionally include overrides:
+The server automatically detects the device's IP and User-Agent from request headers. The app should send its `bundleId` for per-app analytics:
 
-Request (minimal — recommended):
+Request (recommended):
 ```json
-{}
+{
+  "bundleId": "com.lilly.myapp"
+}
 ```
 
 Request (with explicit overrides):
@@ -608,7 +699,8 @@ Request (with explicit overrides):
 {
   "ip": "203.0.113.42",
   "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X)...",
-  "installedAt": "2026-05-13T10:31:15Z"
+  "installedAt": "2026-05-13T10:31:15Z",
+  "bundleId": "com.lilly.myapp"
 }
 ```
 
@@ -639,12 +731,22 @@ Response (no match — or already consumed):
 }
 ```
 
-**Side effect:** Every call records a unique daily app launch:
+**Side effects (every call):**
+- Records a unique daily app launch with `platform` (auto-detected from UA) and `bundleId` (from body)
 - If `matched: true` → recorded as **non-organic** (attributed to a campaign)
 - If `matched: false` → recorded as **organic** (no campaign link)
+- **Organic upgrade:** If the same device already has an organic record today and now matches → upgraded to non-organic
 - Deduplication: max 1 record per fingerprint per calendar day
 
-**One-shot behavior:** A successful match **consumes** the click. Subsequent calls from the same device return `{ "matched": false }` until the user clicks a campaign link again. This prevents duplicate attributions.
+**Matching algorithm:**
+1. Generate exact fingerprint: `SHA256(IP + device_type + model)`
+2. Search clicks by exact fingerprint
+3. If no match → **loose fallback**: search clicks by `IP + device_type`
+4. Filter: unconsumed + not expired + clicked before install time
+5. Pick most recent valid click
+6. Mark click as consumed (one-shot — prevents re-attribution)
+
+**One-shot behavior:** A successful match **consumes** the click. Subsequent calls from the same device return `{ "matched": false }` until the user clicks a campaign link again.
 
 **Confidence Levels:**
 
@@ -660,9 +762,16 @@ Response (no match — or already consumed):
 
 ```
 GET /api/v1/stats/active-users
+GET /api/v1/stats/active-users?platform=ios
+GET /api/v1/stats/active-users?platform=ios&bundleId=com.lilly.myapp
 ```
 
-Returns 30-day active user statistics with daily breakdown.
+Returns 30-day active user statistics with daily breakdown. Supports optional filtering by platform and/or bundleId.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `platform` | string | Filter by OS: `ios`, `android`, or `other` |
+| `bundleId` | string | Filter by app bundle identifier |
 
 Response:
 ```json
@@ -673,6 +782,26 @@ Response:
   "daily": [
     { "date": "2026-05-10", "total": 12, "organic": 8, "nonOrganic": 4 },
     { "date": "2026-05-11", "total": 15, "organic": 10, "nonOrganic": 5 }
+  ]
+}
+```
+
+---
+
+### Registered Apps
+
+```
+GET /api/v1/stats/apps
+```
+
+Returns the list of apps that have sent attribution match calls (with bundleId) in the last 30 days. Used to populate filter dropdowns.
+
+Response:
+```json
+{
+  "apps": [
+    { "platform": "ios", "bundleId": "com.lilly.myapp" },
+    { "platform": "android", "bundleId": "com.lilly.myapp" }
   ]
 }
 ```
@@ -690,7 +819,7 @@ Truncates ALL tables (campaigns, clicks, install_events, app_launches) for a com
 Response:
 ```json
 {
-  "message": "All active user data cleared"
+  "message": "All data cleared"
 }
 ```
 
@@ -768,7 +897,7 @@ The server constructs an Intent URI that the browser handles natively — opens 
 
 ## Mobile App Integration
 
-Call the attribution match API on every app launch:
+Call the attribution match API on every app launch. **Always send your `bundleId`** — this enables per-app analytics on the dashboard.
 
 ### JavaScript / React Native
 
@@ -776,7 +905,7 @@ Call the attribution match API on every app launch:
 const response = await fetch('https://appcampaignpoc.onrender.com/api/v1/attribution/match', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({})
+  body: JSON.stringify({ bundleId: 'com.lilly.myapp' })
 });
 const result = await response.json();
 
@@ -796,7 +925,9 @@ func checkAttribution() async {
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-    request.httpBody = "{}".data(using: .utf8)
+
+    let body: [String: String] = ["bundleId": Bundle.main.bundleIdentifier ?? ""]
+    request.httpBody = try? JSONSerialization.data(withJSONObject: body)
 
     do {
         let (data, _) = try await URLSession.shared.data(for: request)
@@ -807,6 +938,32 @@ func checkAttribution() async {
     } catch {
         print("Attribution check failed: \(error)")
     }
+}
+```
+
+### Kotlin (Android)
+
+```kotlin
+fun checkAttribution(context: Context) {
+    val json = JSONObject().put("bundleId", context.packageName)
+    val body = json.toString().toRequestBody("application/json".toMediaType())
+    val request = Request.Builder()
+        .url("https://appcampaignpoc.onrender.com/api/v1/attribution/match")
+        .post(body)
+        .build()
+
+    OkHttpClient().newCall(request).enqueue(object : Callback {
+        override fun onResponse(call: Call, response: Response) {
+            val result = JSONObject(response.body?.string() ?: "{}")
+            if (result.getBoolean("matched")) {
+                val attribution = result.getJSONObject("attribution")
+                // Personalize experience based on attribution metadata
+            }
+        }
+        override fun onFailure(call: Call, e: IOException) {
+            Log.e("Attribution", "Check failed", e)
+        }
+    })
 }
 ```
 
@@ -839,30 +996,34 @@ curl -X POST http://localhost:3000/api/v1/campaigns \
 #    With deep link config, this returns an HTML page (not a 302)
 curl -A "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15" \
   http://localhost:3000/c/test-campaign
-# → Returns HTML interstitial page that tries lillytest:// scheme
 
-# 4. Query attribution (simulating app's first launch)
+# 4. Query attribution (simulating app's first launch with bundleId)
 curl -X POST http://localhost:3000/api/v1/attribution/match \
   -H "Content-Type: application/json" \
-  -d '{}'
+  -d '{"bundleId": "com.lilly.test"}'
 # → Returns { "matched": true, "attribution": { ... } }
-# → Also records an app launch (non-organic)
+# → Records non-organic app launch for com.lilly.test on iOS
 
-# 5. Query attribution again (second launch)
+# 5. Query attribution again (second launch — same day)
 curl -X POST http://localhost:3000/api/v1/attribution/match \
   -H "Content-Type: application/json" \
-  -d '{}'
+  -d '{"bundleId": "com.lilly.test"}'
 # → Returns { "matched": false, "attribution": null }
-# → Records app launch (organic, since no match)
-# → But deduped: same fingerprint same day = no new record
+# → Deduped: same fingerprint same day = no new record
 
 # 6. Check campaign analytics
 curl http://localhost:3000/api/v1/stats/<campaign-id-from-step-2>
 
-# 7. Check active user stats
+# 7. Check active user stats (unfiltered)
 curl http://localhost:3000/api/v1/stats/active-users
 
-# 8. Clear all data (nuclear reset)
+# 8. Check active user stats (filtered by platform + app)
+curl "http://localhost:3000/api/v1/stats/active-users?platform=ios&bundleId=com.lilly.test"
+
+# 9. Check registered apps
+curl http://localhost:3000/api/v1/stats/apps
+
+# 10. Clear all data (nuclear reset)
 curl -X DELETE http://localhost:3000/api/v1/stats/active-users
 ```
 
@@ -895,6 +1056,8 @@ The `render.yaml` configures:
 
 **Rate limiting:** 100 requests per 15-minute window (per IP).
 
+**Click dedup window:** 10 seconds (same fingerprint + same campaign = duplicate).
+
 **Confidence thresholds:**
 | Threshold | Hours |
 |-----------|-------|
@@ -909,7 +1072,7 @@ The `render.yaml` configures:
 **Backend:**
 - TypeScript + Node.js 20
 - Express 4.x
-- PostgreSQL (pg driver)
+- PostgreSQL (pg driver + advisory locks)
 - Zod (request validation)
 - Pino (structured logging)
 - ua-parser-js (device detection)
@@ -919,7 +1082,7 @@ The `render.yaml` configures:
 - React 18
 - Vite
 - Tailwind CSS
-- Recharts (analytics charts)
+- Recharts (bar charts for analytics)
 - TypeScript
 
 **Infrastructure:**
@@ -937,6 +1100,11 @@ The `render.yaml` configures:
 - [x] Install tracking and mobile integration guide
 - [x] Active user tracking (30-day rolling, organic vs non-organic)
 - [x] Multi-page dashboard with sidebar navigation
+- [x] Per-app per-platform analytics filtering (bundleId + platform)
+- [x] Bot/prefetch detection on click recording
+- [x] Race-safe click dedup with advisory locks
+- [x] Dual-layer fingerprinting (exact + loose fallback)
+- [x] Native iOS app UA detection (CFNetwork/Darwin)
 - [ ] Authentication for campaign management APIs
 - [ ] Webhook notifications on attribution match
 - [ ] SDK packages for iOS/Android integration
