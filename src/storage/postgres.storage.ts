@@ -231,41 +231,59 @@ export class PostgresStorage implements IStorage {
 
   /**
    * Atomic dedup: inserts click + increments campaign count ONLY if
-   * no click from same fingerprint + campaign exists within last 30 seconds.
+   * no click from same fingerprint + campaign exists within last 10 seconds.
+   * Uses advisory lock to prevent race conditions from concurrent requests.
    * Returns true if inserted, false if duplicate was blocked.
    */
   async createClickIfNotDuplicate(click: ClickRecord): Promise<boolean> {
-    const result = await this.pool.query(
-      `INSERT INTO clicks (id, campaign_id, fingerprint, ip, user_agent, device, referer, clicked_at, expires_at, consumed)
-       SELECT $1::uuid, $2::uuid, $3::varchar, $4::varchar, $5::text, $6::varchar, $7::text, $8::timestamptz, $9::timestamptz, $10::boolean
-       WHERE NOT EXISTS (
-         SELECT 1 FROM clicks
-         WHERE fingerprint = $3::varchar
-           AND campaign_id = $2::uuid
-           AND clicked_at > NOW() - INTERVAL '10 seconds'
-       )`,
-      [
-        click.id,
-        click.campaignId,
-        click.fingerprint,
-        click.ip,
-        click.userAgent,
-        click.device,
-        click.referer,
-        click.clickedAt,
-        click.expiresAt,
-        click.consumed,
-      ]
-    );
+    // Use advisory lock based on hash of fingerprint+campaignId to serialize concurrent requests
+    const lockKey = Buffer.from(click.fingerprint + click.campaignId).reduce((a, b) => ((a << 5) - a + b) | 0, 0);
 
-    const inserted = (result.rowCount ?? 0) > 0;
-    if (inserted) {
-      await this.pool.query(
-        'UPDATE campaigns SET click_count = click_count + 1, updated_at = NOW() WHERE id = $1',
-        [click.campaignId]
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      // Advisory lock scoped to this transaction
+      await client.query('SELECT pg_advisory_xact_lock($1::bigint)', [lockKey]);
+
+      const result = await client.query(
+        `INSERT INTO clicks (id, campaign_id, fingerprint, ip, user_agent, device, referer, clicked_at, expires_at, consumed)
+         SELECT $1::uuid, $2::uuid, $3::varchar, $4::varchar, $5::text, $6::varchar, $7::text, $8::timestamptz, $9::timestamptz, $10::boolean
+         WHERE NOT EXISTS (
+           SELECT 1 FROM clicks
+           WHERE fingerprint = $3::varchar
+             AND campaign_id = $2::uuid
+             AND clicked_at > NOW() - INTERVAL '10 seconds'
+         )`,
+        [
+          click.id,
+          click.campaignId,
+          click.fingerprint,
+          click.ip,
+          click.userAgent,
+          click.device,
+          click.referer,
+          click.clickedAt,
+          click.expiresAt,
+          click.consumed,
+        ]
       );
+
+      const inserted = (result.rowCount ?? 0) > 0;
+      if (inserted) {
+        await client.query(
+          'UPDATE campaigns SET click_count = click_count + 1, updated_at = NOW() WHERE id = $1',
+          [click.campaignId]
+        );
+      }
+
+      await client.query('COMMIT');
+      return inserted;
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
     }
-    return inserted;
   }
 
   async getClicksByFingerprint(fingerprint: string): Promise<ClickRecord[]> {
