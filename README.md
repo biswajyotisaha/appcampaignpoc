@@ -1,6 +1,6 @@
-# Campaign Attribution Server
+# LillyTrack
 
-A lightweight, self-hosted campaign attribution server inspired by AppsFlyer. It tracks which ad/campaign link a user clicked, redirects them to the appropriate app store (or opens the app directly via deep linking), and later tells your app about it — enabling personalized first-launch experiences.
+A lightweight, self-hosted campaign attribution and active user tracking server inspired by AppsFlyer. It tracks which ad/campaign link a user clicked, redirects them to the appropriate app store (or opens the app directly via deep linking), matches app launches to campaign clicks via fingerprinting, and provides a real-time dashboard with active user analytics.
 
 ## How It Works
 
@@ -30,6 +30,8 @@ A lightweight, self-hosted campaign attribution server inspired by AppsFlyer. It
 │  │         tries app:// scheme        │                   click consumed             │
 │  │         (falls back to store)      │                   (one-shot)                │
 │  └─ NO  → 302 redirect to store      │                                             │
+│                                       │                   Also records app launch    │
+│                                       │                   for active user tracking   │
 │                                                                                     │
 └────────────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -45,6 +47,7 @@ This server acts as a middleman that **remembers** who clicked what:
 1. **Click Time:** Records a fingerprint (hash of IP + device info) along with campaign parameters
 2. **Open/Install Time:** If deep linking is configured, tries to open the app directly — otherwise redirects to the store
 3. **Attribution Match:** The app calls the match API on launch — server compares fingerprints and returns campaign context (one-shot, consumed after first match)
+4. **Active User Tracking:** Every match call records a unique daily app launch, classified as organic (no campaign match) or non-organic (matched to a campaign)
 
 ### Fingerprint Matching
 
@@ -56,7 +59,7 @@ CLICK TIME:                          APP LAUNCH TIME:
   UA: iPhone/iOS 18.7                  UA: iPhone/iOS 18.7
   Time: 10:30:00                       Time: 10:31:15
 
-  fingerprint = SHA256("203.0.113.42|ios|18.7|iphone")
+  fingerprint = SHA256("203.0.113.42|ios|ios|18.7|iphone")
 
   Same fingerprint + within 24h window = MATCH
   Click is then CONSUMED (won't match again)
@@ -68,29 +71,64 @@ CLICK TIME:                          APP LAUNCH TIME:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                              Docker Container                                     │
+│                              Render (Docker Container)                            │
 │                                                                                   │
 │  ┌─────────────────────────────────────────────────────────────────────────┐     │
-│  │                    Express Server (port 3000)                             │     │
+│  │                    Express Server (port 10000)                            │     │
 │  │                                                                           │     │
 │  │  /c/:slug                → Click Handler (deep link or redirect)         │     │
 │  │  /api/v1/campaigns       → Campaign CRUD (with deep link config)         │     │
-│  │  /api/v1/attribution     → Attribution Match API                         │     │
-│  │  /api/v1/stats           → Analytics API (daily aggregates)              │     │
+│  │  /api/v1/attribution     → Attribution Match + App Launch Recording      │     │
+│  │  /api/v1/stats           → Analytics API (campaign + active users)       │     │
 │  │  /health                 → Health Check                                  │     │
-│  │  /*                      → React Dashboard (production)                  │     │
+│  │  /*                      → React Dashboard (LillyTrack)                  │     │
 │  └─────────────────────────────────────────────────────────────────────────┘     │
 │                                                                                   │
 │  ┌────────────────────┐  ┌──────────────────────────────────────────────┐       │
-│  │  web-dist/          │  │  In-Memory Storage (Maps)                     │       │
-│  │  (React SPA)        │  │  • campaigns (by id, by slug)                 │       │
+│  │  web-dist/          │  │  PostgreSQL (Render managed)                  │       │
+│  │  (React SPA)        │  │  • campaigns                                  │       │
 │  │                     │  │  • clicks (by id, by fingerprint)             │       │
-│  │                     │  │  • daily stats (click/install events)          │       │
+│  │                     │  │  • install_events (daily aggregates)           │       │
+│  │                     │  │  • app_launches (active user tracking)         │       │
 │  └────────────────────┘  └──────────────────────────────────────────────┘       │
 │                                                                                   │
 │  ┌──────────────────────────────────────────────────────────────────────────┐    │
 │  │  Middleware: CORS │ Rate Limiter (100/15min) │ Request Logger │ Errors    │    │
 │  └──────────────────────────────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Database Schema
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                           PostgreSQL TABLES                                       │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                   │
+│  campaigns                          clicks                                       │
+│  ──────────                         ──────                                       │
+│  id          UUID PK                id           UUID PK                         │
+│  name        VARCHAR(200)           campaign_id  UUID FK → campaigns             │
+│  slug        VARCHAR(100) UNIQUE    fingerprint  VARCHAR(128)                    │
+│  ios_url     TEXT                   ip           VARCHAR(45)                     │
+│  android_url TEXT                   user_agent   TEXT                            │
+│  fallback_url TEXT                  device       VARCHAR(20)                     │
+│  metadata    JSONB                  referer      TEXT                            │
+│  deep_link   JSONB                  clicked_at   TIMESTAMPTZ                    │
+│  click_count INTEGER                expires_at   TIMESTAMPTZ                    │
+│  install_count INTEGER              consumed     BOOLEAN                         │
+│  created_at  TIMESTAMPTZ                                                         │
+│  updated_at  TIMESTAMPTZ           install_events                               │
+│                                     ──────────────                               │
+│  app_launches                       id           SERIAL PK                       │
+│  ────────────                       campaign_id  UUID FK → campaigns             │
+│  id          SERIAL PK              installed_at TIMESTAMPTZ                    │
+│  fingerprint VARCHAR(128)                                                        │
+│  ip          VARCHAR(45)                                                         │
+│  is_organic  BOOLEAN                                                             │
+│  campaign_id VARCHAR(36)                                                         │
+│  launched_at TIMESTAMPTZ                                                         │
+│                                                                                   │
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -138,11 +176,11 @@ CLICK TIME:                          APP LAUNCH TIME:
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Attribution Match Flow
+### Attribution + Active User Tracking Flow
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                        ATTRIBUTION MATCH LOGIC                                    │
+│                  ATTRIBUTION MATCH + ACTIVE USER TRACKING                         │
 ├─────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                   │
 │   POST /api/v1/attribution/match                                                 │
@@ -151,6 +189,7 @@ CLICK TIME:                          APP LAUNCH TIME:
 │         ▼                                                                         │
 │   Generate fingerprint from                                                      │
 │   request IP + User-Agent                                                        │
+│   hash = SHA256("{ip}|{os}|{osVersion}|{deviceModel}")                          │
 │         │                                                                         │
 │         ▼                                                                         │
 │   Find clicks with same fingerprint                                              │
@@ -177,7 +216,18 @@ CLICK TIME:                          APP LAUNCH TIME:
 │     │   Record install event                                                     │
 │     │      │                                                                     │
 │     ▼      ▼                                                                     │
-│  { matched: false }    { matched: true, attribution: { ... } }                   │
+│  ORGANIC   NON-ORGANIC                                                           │
+│     │      │                                                                     │
+│     └──┬───┘                                                                     │
+│        ▼                                                                         │
+│   Record app launch (one per device per day)                                     │
+│   • fingerprint + ip + is_organic + campaign_id                                  │
+│   • Purges entries older than 30 days                                            │
+│   • Deduplicates: max 1 record per fingerprint per calendar day                  │
+│        │                                                                         │
+│        ▼                                                                         │
+│   Return response to app                                                         │
+│   { matched: true/false, attribution: { ... } | null }                           │
 │                                                                                   │
 │  IMPORTANT: Attribution is ONE-SHOT.                                             │
 │  Once consumed, same fingerprint won't match again.                              │
@@ -186,7 +236,7 @@ CLICK TIME:                          APP LAUNCH TIME:
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Request Processing Pipeline
+### Service Layer Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
@@ -199,10 +249,10 @@ CLICK TIME:                          APP LAUNCH TIME:
 │  campaign.routes ──────► campaign.service ──────────► IStorage                   │
 │  (Zod validation)        (CRUD + slug uniqueness)     interface                  │
 │                                                        │                          │
-│  click.routes ─────────► redirect.service             MemoryStorage              │
-│  (UA extraction)         (device detect + action)     (Maps + indexes)           │
-│                     ├──► click.service                                            │
-│                     │    (record + fingerprint)                                   │
+│  click.routes ─────────► redirect.service             ├── PostgresStorage        │
+│  (UA extraction)         (device detect + action)     │   (production)           │
+│                     ├──► click.service                 └── MemoryStorage          │
+│                     │    (record + fingerprint)            (local dev)            │
 │                     └──► deeplink-page.service                                   │
 │                          (HTML renderer)                                          │
 │                                                                                   │
@@ -210,10 +260,13 @@ CLICK TIME:                          APP LAUNCH TIME:
 │  (header extraction)     (match + consume + score)                               │
 │                     ├──► fingerprint.service                                     │
 │                     │    (SHA-256 hash generation)                                │
-│                     └──► click.service                                            │
-│                          (lookup by fingerprint)                                  │
+│                     ├──► click.service                                            │
+│                     │    (lookup by fingerprint)                                  │
+│                     └──► storage.recordAppLaunch()                               │
+│                          (active user tracking)                                   │
 │                                                                                   │
-│  stats.routes ─────────► storage.getDailyStats()                                 │
+│  stats.routes ─────────► storage.getActiveUserStats()                            │
+│                     └──► storage.getDailyStats()                                 │
 │                                                                                   │
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -226,11 +279,11 @@ CLICK TIME:                          APP LAUNCH TIME:
 appcampaignpoc/
 ├── Dockerfile                    # Multi-stage build (backend + frontend)
 ├── docker-compose.yml            # Local Docker dev
-├── render.yaml                   # Render deployment config
+├── render.yaml                   # Render deployment config (with PostgreSQL)
 ├── package.json                  # Backend dependencies
 ├── tsconfig.json                 # Backend TypeScript config
 ├── src/                          # --- BACKEND ---
-│   ├── index.ts                  # Server bootstrap
+│   ├── index.ts                  # Server bootstrap (initializeStorage → createApp)
 │   ├── app.ts                    # Express app factory
 │   ├── config/
 │   │   └── index.ts              # Environment configuration
@@ -239,9 +292,10 @@ appcampaignpoc/
 │   │   ├── click.model.ts        # Click record interface
 │   │   └── attribution.model.ts  # Attribution result interface
 │   ├── storage/
-│   │   ├── storage.interface.ts  # Abstract contract (swap to DB later)
-│   │   ├── memory.storage.ts     # In-memory Map implementation
-│   │   └── index.ts              # Storage factory
+│   │   ├── storage.interface.ts  # IStorage contract (campaigns + clicks + active users)
+│   │   ├── postgres.storage.ts   # PostgreSQL implementation (production)
+│   │   ├── memory.storage.ts     # In-memory Map implementation (local dev)
+│   │   └── index.ts              # Storage factory (auto-selects by DATABASE_URL)
 │   ├── services/
 │   │   ├── fingerprint.service.ts  # SHA-256 hashing + UA normalization
 │   │   ├── redirect.service.ts     # Device detection + deep link resolution
@@ -253,8 +307,8 @@ appcampaignpoc/
 │   │   ├── health.routes.ts      # GET /health
 │   │   ├── campaign.routes.ts    # CRUD /api/v1/campaigns (Zod validated)
 │   │   ├── click.routes.ts       # GET /c/:slug (deep link or redirect)
-│   │   ├── attribution.routes.ts # POST /api/v1/attribution/match
-│   │   └── stats.routes.ts       # GET /api/v1/stats/:campaignId
+│   │   ├── attribution.routes.ts # POST /api/v1/attribution/match + app launch recording
+│   │   └── stats.routes.ts       # GET/DELETE /api/v1/stats/active-users + GET /:campaignId
 │   ├── middleware/
 │   │   ├── error-handler.ts      # Global error handling
 │   │   └── request-logger.ts     # Structured request logging
@@ -268,14 +322,18 @@ appcampaignpoc/
     ├── vite.config.ts            # Vite config (proxies /api to backend in dev)
     ├── tailwind.config.js
     ├── postcss.config.js
-    ├── index.html
+    ├── index.html                # Page title: LillyTrack
     └── src/
         ├── main.tsx              # React entry point
-        ├── App.tsx               # Main app shell
+        ├── App.tsx               # Root layout (sidebar + page routing)
+        ├── Sidebar.tsx           # Left navigation (Home / Campaigns)
+        ├── HomePage.tsx          # Active user stats + charts + Clear All Data
+        ├── ActiveUsersChart.tsx   # Dual line charts (daily users + organic/non-organic)
+        ├── CampaignsPage.tsx     # Campaign CRUD + analytics with dropdown selector
         ├── CampaignForm.tsx      # Create campaign form (with deep link config)
         ├── CampaignList.tsx      # Campaign cards + integration guide
-        ├── CampaignChart.tsx     # Analytics chart (Recharts line chart)
-        ├── api.ts                # API client (fetch wrapper)
+        ├── CampaignChart.tsx     # Per-campaign analytics chart (Recharts)
+        ├── api.ts                # API client (campaigns + stats + active users)
         ├── index.css             # Tailwind base styles
         └── vite-env.d.ts         # Vite type declarations
 ```
@@ -284,16 +342,18 @@ appcampaignpoc/
 
 | Decision | Rationale |
 |----------|-----------|
-| Interface-based storage | Swap in PostgreSQL/Redis later without touching business logic |
+| PostgreSQL persistent storage | Survives redeploys, free tier on Render, proper indexing |
+| Interface-based storage (IStorage) | Swap between PostgreSQL (prod) and in-memory (dev) without touching business logic |
 | SHA-256 fingerprint hash | Privacy (no raw IP+UA stored together), fast O(1) lookups |
+| Normalized UA for fingerprinting | `"{ip}\|{os}\|{osVersion}\|{deviceModel}"` — strips browser version changes between click and app |
 | 24-hour attribution window | Industry standard, configurable via env var |
 | One-shot attribution (click consumed) | Prevents duplicate install counts; user must click again for new attribution |
+| Active user dedup (1 per device/day) | Tracks unique daily users, not raw launch count |
+| 30-day rolling window | Active user data auto-purges on each insert |
+| campaign_id as VARCHAR in app_launches | No FK — data survives campaign deletion |
 | Interstitial page for deep links | Can't 302 to custom schemes; HTML page handles app-open attempt + fallback |
 | Intent URI for Android | Native browser handling: opens app if installed, falls back to Play Store |
-| Express over Fastify | Simpler, larger ecosystem, good enough for this scale |
-| Zod validation | Runtime type safety on API boundaries |
-| Pino logger | Structured JSON logs, low overhead |
-| React + Vite + Tailwind | Fast builds, modern DX, utility-first CSS |
+| State-based page routing (no react-router) | Minimal deps, simple two-page app |
 | Auto-detect base URL from request | No manual config needed — works on any domain |
 | Async click recording | Non-blocking — doesn't delay the redirect/page response |
 
@@ -301,16 +361,23 @@ appcampaignpoc/
 
 ## Dashboard UI
 
-The React frontend provides an admin dashboard for managing campaigns:
+The LillyTrack dashboard is a two-page React SPA with a sidebar navigation:
 
+### Home Page
+- **3 stat cards** — Total Active Users (30d), Non-Organic Launches, Organic Launches
+- **Daily Active Users chart** — Line chart showing unique users over 30 days
+- **Organic vs Non-Organic chart** — Dual line chart comparing launch sources
+- **Clear All Data button** — Truncates ALL tables (campaigns, clicks, installs, app launches) for a fresh start
+
+### Campaigns Page
+- **Campaign analytics chart** — always visible at top with dropdown to switch between campaigns
 - **Create campaigns** with App Store, Play Store, and fallback URLs
-- **Configure deep linking** — expandable section with iOS scheme and Android package inputs, plus setup instructions (Info.plist / AndroidManifest.xml code)
+- **Configure deep linking** — expandable section with iOS scheme and Android package inputs
 - **Auto-generates URL slugs** from campaign names
-- **Fixed metadata fields** — Source and Topic inputs (keys are fixed, no raw JSON)
+- **Fixed metadata fields** — Source and Topic inputs
 - **Copy tracking links** to clipboard with one click
 - **View click & install counts** per campaign
-- **Analytics charts** — Recharts line chart showing daily clicks/installs over time
-- **Mobile integration guide** — per-campaign code snippets (JavaScript fetch + Swift) showing how to call the attribution match API
+- **Mobile integration guide** — per-campaign code snippets (JavaScript + Swift)
 - **Delete campaigns** with confirmation
 
 In production, the dashboard is served by the same Express server at the root URL (`/`).
@@ -527,7 +594,7 @@ POST /api/v1/attribution/match
 Content-Type: application/json
 ```
 
-Called by your app on launch to retrieve campaign context.
+Called by your app on launch to retrieve campaign context. Also records the app launch for active user tracking.
 
 The server automatically detects the device's IP and User-Agent from request headers — the request body can be empty or optionally include overrides:
 
@@ -572,6 +639,11 @@ Response (no match — or already consumed):
 }
 ```
 
+**Side effect:** Every call records a unique daily app launch:
+- If `matched: true` → recorded as **non-organic** (attributed to a campaign)
+- If `matched: false` → recorded as **organic** (no campaign link)
+- Deduplication: max 1 record per fingerprint per calendar day
+
 **One-shot behavior:** A successful match **consumes** the click. Subsequent calls from the same device return `{ "matched": false }` until the user clicks a campaign link again. This prevents duplicate attributions.
 
 **Confidence Levels:**
@@ -584,13 +656,53 @@ Response (no match — or already consumed):
 
 ---
 
+### Active User Stats
+
+```
+GET /api/v1/stats/active-users
+```
+
+Returns 30-day active user statistics with daily breakdown.
+
+Response:
+```json
+{
+  "totalActiveUsers": 142,
+  "nonOrganicInstalls": 38,
+  "organicInstalls": 104,
+  "daily": [
+    { "date": "2026-05-10", "total": 12, "organic": 8, "nonOrganic": 4 },
+    { "date": "2026-05-11", "total": 15, "organic": 10, "nonOrganic": 5 }
+  ]
+}
+```
+
+---
+
+### Clear All Data
+
+```
+DELETE /api/v1/stats/active-users
+```
+
+Truncates ALL tables (campaigns, clicks, install_events, app_launches) for a complete reset.
+
+Response:
+```json
+{
+  "message": "All active user data cleared"
+}
+```
+
+---
+
 ### Campaign Stats (Analytics)
 
 ```
 GET /api/v1/stats/:campaignId
 ```
 
-Returns daily aggregated click and install counts for a campaign, used by the dashboard chart.
+Returns daily aggregated click and install counts for a campaign.
 
 Response:
 ```json
@@ -734,16 +846,24 @@ curl -X POST http://localhost:3000/api/v1/attribution/match \
   -H "Content-Type: application/json" \
   -d '{}'
 # → Returns { "matched": true, "attribution": { ... } }
+# → Also records an app launch (non-organic)
 
 # 5. Query attribution again (second launch)
 curl -X POST http://localhost:3000/api/v1/attribution/match \
   -H "Content-Type: application/json" \
   -d '{}'
 # → Returns { "matched": false, "attribution": null }
-#   (click was consumed on first match)
+# → Records app launch (organic, since no match)
+# → But deduped: same fingerprint same day = no new record
 
-# 6. Check analytics
+# 6. Check campaign analytics
 curl http://localhost:3000/api/v1/stats/<campaign-id-from-step-2>
+
+# 7. Check active user stats
+curl http://localhost:3000/api/v1/stats/active-users
+
+# 8. Clear all data (nuclear reset)
+curl -X DELETE http://localhost:3000/api/v1/stats/active-users
 ```
 
 ---
@@ -758,6 +878,7 @@ No manual URL configuration needed — the server auto-detects its own host from
 
 The `render.yaml` configures:
 - Docker-based web service (multi-stage build: backend + frontend)
+- PostgreSQL database (free tier) with auto-configured `DATABASE_URL`
 - Health check at `/health`
 - Auto-deploy on push to main
 
@@ -769,6 +890,7 @@ The `render.yaml` configures:
 |----------|---------|-------------|
 | `PORT` | `3000` | Server port |
 | `NODE_ENV` | `development` | Environment (production serves React dashboard) |
+| `DATABASE_URL` | _(empty)_ | PostgreSQL connection string (if empty, uses in-memory storage) |
 | `ATTRIBUTION_WINDOW_HOURS` | `24` | How long a click is valid for matching |
 
 **Rate limiting:** 100 requests per 15-minute window (per IP).
@@ -787,6 +909,7 @@ The `render.yaml` configures:
 **Backend:**
 - TypeScript + Node.js 20
 - Express 4.x
+- PostgreSQL (pg driver)
 - Zod (request validation)
 - Pino (structured logging)
 - ua-parser-js (device detection)
@@ -801,19 +924,21 @@ The `render.yaml` configures:
 
 **Infrastructure:**
 - Docker (multi-stage Alpine build)
-- Render (render.yaml)
+- Render (render.yaml + managed PostgreSQL)
 
 ---
 
 ## Future Improvements
 
-- [ ] PostgreSQL/Redis storage backend
-- [ ] Authentication for campaign management APIs
+- [x] PostgreSQL persistent storage
 - [x] Campaign analytics (charts, conversion rates)
-- [ ] Webhook notifications on attribution match
 - [x] Deep linking support (open app if installed, fallback to store)
 - [x] Click consumption (one-shot attribution — prevents duplicates)
 - [x] Install tracking and mobile integration guide
+- [x] Active user tracking (30-day rolling, organic vs non-organic)
+- [x] Multi-page dashboard with sidebar navigation
+- [ ] Authentication for campaign management APIs
+- [ ] Webhook notifications on attribution match
 - [ ] SDK packages for iOS/Android integration
 - [ ] A/B testing support via campaign variants
 - [ ] Universal Links (iOS) / App Links (Android) support
