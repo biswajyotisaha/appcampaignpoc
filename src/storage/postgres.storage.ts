@@ -54,7 +54,7 @@ CREATE TABLE IF NOT EXISTS app_launches (
   launched_at TIMESTAMPTZ NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_app_launches_launched_at ON app_launches(launched_at);
-CREATE INDEX IF NOT EXISTS idx_app_launches_fingerprint_date ON app_launches(fingerprint, (DATE(launched_at)));
+CREATE INDEX IF NOT EXISTS idx_app_launches_fingerprint ON app_launches(fingerprint);
 `;
 
 export class PostgresStorage implements IStorage {
