@@ -233,5 +233,10 @@ export class MemoryStorage implements IStorage {
 
   async clearAppLaunches(): Promise<void> {
     this.appLaunches = [];
+    this.campaigns.clear();
+    this.clicks.clear();
+    this.clicksByFingerprint.clear();
+    this.slugToId.clear();
+    this.installEvents.clear();
   }
 }

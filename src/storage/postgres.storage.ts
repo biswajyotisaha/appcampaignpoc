@@ -312,7 +312,7 @@ export class PostgresStorage implements IStorage {
   }
 
   async clearAppLaunches(): Promise<void> {
-    await this.pool.query('TRUNCATE app_launches');
+    await this.pool.query('TRUNCATE app_launches, clicks, install_events, campaigns CASCADE');
   }
 
   // --- Helpers ---
