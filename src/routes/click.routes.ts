@@ -26,16 +26,18 @@ router.get('/:slug', async (req: Request, res: Response): Promise<void> => {
   // Resolve redirect target
   const { device, action } = resolveRedirect(campaign, userAgent);
 
-  // Record the click asynchronously (don't block redirect)
-  recordClick({
-    campaignId: campaign.id,
-    ip,
-    userAgent,
-    device,
-    referer,
-  }).catch(err => {
+  // Record the click (awaited so dedup works against rapid double-requests)
+  try {
+    await recordClick({
+      campaignId: campaign.id,
+      ip,
+      userAgent,
+      device,
+      referer,
+    });
+  } catch (err) {
     logger.error({ err, slug }, 'Failed to record click');
-  });
+  }
 
   logger.info({
     source: 'click',
