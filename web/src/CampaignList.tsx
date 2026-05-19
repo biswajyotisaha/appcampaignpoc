@@ -114,8 +114,8 @@ export default function CampaignList({ campaigns, onDelete, onViewStats }: Props
                 <div className="mt-2 bg-[#f5f6fa] rounded-lg border border-gray-200 p-4 text-xs">
                   <h4 className="font-semibold text-gray-900 mb-2">Mobile App Integration</h4>
                   <p className="text-gray-600 mb-3">
-                    Call this endpoint from your app on first launch to retrieve campaign context.
-                    The server automatically detects the device's IP and User-Agent from the request headers.
+                    Call this endpoint from your app on every launch to retrieve campaign context.
+                    The server automatically detects IP and User-Agent from headers. Pass your app's <strong>bundleId</strong> for per-app analytics.
                   </p>
 
                   <div className="mb-2 font-medium text-gray-700">Endpoint:</div>
@@ -123,23 +123,35 @@ export default function CampaignList({ campaigns, onDelete, onViewStats }: Props
                     POST {baseUrl}/api/v1/attribution/match
                   </code>
 
-                  <div className="mb-2 font-medium text-gray-700">Request (minimal):</div>
+                  <div className="mb-2 font-medium text-gray-700">JavaScript / React Native:</div>
                   <pre className="bg-white px-3 py-2 rounded border border-gray-200 text-gray-800 mb-3 overflow-x-auto">
 {`fetch("${baseUrl}/api/v1/attribution/match", {
   method: "POST",
   headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({})
+  body: JSON.stringify({ bundleId: "${campaign.deepLink?.androidPackage || 'com.example.myapp'}" })
 })`}
                   </pre>
 
-                  <div className="mb-2 font-medium text-gray-700">Swift Example:</div>
+                  <div className="mb-2 font-medium text-gray-700">Swift (iOS):</div>
                   <pre className="bg-white px-3 py-2 rounded border border-gray-200 text-gray-800 mb-3 overflow-x-auto">
 {`var request = URLRequest(url: URL(string: "${baseUrl}/api/v1/attribution/match")!)
 request.httpMethod = "POST"
 request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-request.httpBody = "{}".data(using: .utf8)
+let body: [String: String] = ["bundleId": Bundle.main.bundleIdentifier ?? ""]
+request.httpBody = try? JSONSerialization.data(withJSONObject: body)
 let (data, _) = try await URLSession.shared.data(for: request)
 let attribution = try JSONDecoder().decode(AttributionResponse.self, from: data)`}
+                  </pre>
+
+                  <div className="mb-2 font-medium text-gray-700">Kotlin (Android):</div>
+                  <pre className="bg-white px-3 py-2 rounded border border-gray-200 text-gray-800 mb-3 overflow-x-auto">
+{`val json = JSONObject().put("bundleId", context.packageName)
+val body = json.toString().toRequestBody("application/json".toMediaType())
+val request = Request.Builder()
+    .url("${baseUrl}/api/v1/attribution/match")
+    .post(body)
+    .build()
+OkHttpClient().newCall(request).execute()`}
                   </pre>
 
                   <div className="mb-2 font-medium text-gray-700">Response (when matched):</div>
