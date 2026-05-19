@@ -55,6 +55,11 @@ CREATE TABLE IF NOT EXISTS app_launches (
   bundle_id VARCHAR(200) DEFAULT NULL,
   launched_at TIMESTAMPTZ NOT NULL
 );
+
+-- Migrations: add columns to existing tables
+ALTER TABLE app_launches ADD COLUMN IF NOT EXISTS platform VARCHAR(10) NOT NULL DEFAULT 'other';
+ALTER TABLE app_launches ADD COLUMN IF NOT EXISTS bundle_id VARCHAR(200) DEFAULT NULL;
+
 CREATE INDEX IF NOT EXISTS idx_app_launches_launched_at ON app_launches(launched_at);
 CREATE INDEX IF NOT EXISTS idx_app_launches_fingerprint ON app_launches(fingerprint);
 CREATE INDEX IF NOT EXISTS idx_app_launches_platform ON app_launches(platform);
