@@ -1,16 +1,35 @@
 import { useState, useEffect } from 'react';
-import { ActiveUserStats, fetchActiveUserStats } from './api';
+import { ActiveUserStats, RegisteredApp, fetchActiveUserStats, fetchRegisteredApps } from './api';
 import ActiveUsersChart from './ActiveUsersChart';
 
 export default function HomePage() {
   const [stats, setStats] = useState<ActiveUserStats | null>(null);
+  const [apps, setApps] = useState<RegisteredApp[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const loadStats = async () => {
+  // Filters
+  const [selectedPlatform, setSelectedPlatform] = useState<string>('');
+  const [selectedApp, setSelectedApp] = useState<string>('');
+
+  // Get unique platforms from registered apps
+  const platforms = [...new Set(apps.map(a => a.platform))].sort();
+  // Get apps filtered by selected platform
+  const filteredApps = selectedPlatform
+    ? apps.filter(a => a.platform === selectedPlatform)
+    : apps;
+
+  const loadApps = async () => {
+    try {
+      const data = await fetchRegisteredApps();
+      setApps(data);
+    } catch (_) { /* ignore */ }
+  };
+
+  const loadStats = async (platform?: string, bundleId?: string) => {
     try {
       setLoading(true);
-      const data = await fetchActiveUserStats();
+      const data = await fetchActiveUserStats(platform || undefined, bundleId || undefined);
       setStats(data);
       setError(null);
     } catch (err: any) {
@@ -21,14 +40,53 @@ export default function HomePage() {
   };
 
   useEffect(() => {
+    loadApps();
     loadStats();
   }, []);
 
+  // Reload stats when filters change
+  useEffect(() => {
+    loadStats(selectedPlatform, selectedApp);
+  }, [selectedPlatform, selectedApp]);
+
+  const handlePlatformChange = (val: string) => {
+    setSelectedPlatform(val);
+    setSelectedApp(''); // Reset app when platform changes
+  };
+
   return (
     <div>
-      <div className="mb-6">
-        <h2 className="text-xl font-semibold text-gray-900">Marketing Overview</h2>
-        <p className="text-sm text-gray-500 mt-1">Last 30 days</p>
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h2 className="text-xl font-semibold text-gray-900">Marketing Overview</h2>
+          <p className="text-sm text-gray-500 mt-1">Last 30 days</p>
+        </div>
+
+        {/* Filters */}
+        <div className="flex items-center gap-3">
+          <select
+            value={selectedPlatform}
+            onChange={(e) => handlePlatformChange(e.target.value)}
+            className="px-3 py-1.5 border border-gray-200 rounded-md text-sm bg-white focus:ring-2 focus:ring-[#1a1f36] focus:border-[#1a1f36]"
+          >
+            <option value="">All Platforms</option>
+            {platforms.map(p => (
+              <option key={p} value={p}>{p === 'ios' ? 'iOS' : p === 'android' ? 'Android' : p}</option>
+            ))}
+          </select>
+
+          <select
+            value={selectedApp}
+            onChange={(e) => setSelectedApp(e.target.value)}
+            className="px-3 py-1.5 border border-gray-200 rounded-md text-sm bg-white focus:ring-2 focus:ring-[#1a1f36] focus:border-[#1a1f36]"
+            disabled={filteredApps.length === 0}
+          >
+            <option value="">All Apps</option>
+            {filteredApps.map(a => (
+              <option key={`${a.platform}-${a.bundleId}`} value={a.bundleId}>{a.bundleId}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {error && (

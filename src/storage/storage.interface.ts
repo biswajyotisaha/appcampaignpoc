@@ -21,6 +21,16 @@ export interface ActiveUserStats {
   daily: ActiveUserDailyStat[];
 }
 
+export interface ActiveUserFilter {
+  platform?: string; // 'ios' | 'android'
+  bundleId?: string;
+}
+
+export interface RegisteredApp {
+  platform: string;
+  bundleId: string;
+}
+
 export interface IStorage {
   // Campaigns
   createCampaign(campaign: Campaign): Promise<Campaign>;
@@ -46,7 +56,8 @@ export interface IStorage {
   purgeExpiredClicks(): Promise<number>;
 
   // Active Users (app launches)
-  recordAppLaunch(fingerprint: string, ip: string, isOrganic: boolean, campaignId: string | null): Promise<void>;
-  getActiveUserStats(): Promise<ActiveUserStats>;
+  recordAppLaunch(fingerprint: string, ip: string, isOrganic: boolean, campaignId: string | null, platform: string, bundleId: string | null): Promise<void>;
+  getActiveUserStats(filter?: ActiveUserFilter): Promise<ActiveUserStats>;
+  getRegisteredApps(): Promise<RegisteredApp[]>;
   clearAppLaunches(): Promise<void>;
 }

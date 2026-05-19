@@ -1,7 +1,7 @@
 import { Pool } from 'pg';
 import { Campaign } from '../models/campaign.model';
 import { ClickRecord } from '../models/click.model';
-import { IStorage, DailyStat, ActiveUserStats } from './storage.interface';
+import { IStorage, DailyStat, ActiveUserStats, ActiveUserFilter, RegisteredApp } from './storage.interface';
 import { logger } from '../utils/logger';
 
 const SCHEMA_SQL = `
@@ -51,10 +51,14 @@ CREATE TABLE IF NOT EXISTS app_launches (
   ip VARCHAR(45) NOT NULL,
   is_organic BOOLEAN NOT NULL DEFAULT TRUE,
   campaign_id VARCHAR(36) DEFAULT NULL,
+  platform VARCHAR(10) NOT NULL DEFAULT 'other',
+  bundle_id VARCHAR(200) DEFAULT NULL,
   launched_at TIMESTAMPTZ NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_app_launches_launched_at ON app_launches(launched_at);
 CREATE INDEX IF NOT EXISTS idx_app_launches_fingerprint ON app_launches(fingerprint);
+CREATE INDEX IF NOT EXISTS idx_app_launches_platform ON app_launches(platform);
+CREATE INDEX IF NOT EXISTS idx_app_launches_bundle_id ON app_launches(bundle_id);
 `;
 
 export class PostgresStorage implements IStorage {
@@ -323,18 +327,18 @@ export class PostgresStorage implements IStorage {
 
   // --- Active Users (App Launches) ---
 
-  async recordAppLaunch(fingerprint: string, ip: string, isOrganic: boolean, campaignId: string | null): Promise<void> {
+  async recordAppLaunch(fingerprint: string, ip: string, isOrganic: boolean, campaignId: string | null, platform: string, bundleId: string | null): Promise<void> {
     // Purge old data (older than 30 days)
     await this.pool.query("DELETE FROM app_launches WHERE launched_at < NOW() - INTERVAL '30 days'");
 
     // Insert only if this fingerprint hasn't launched today
     await this.pool.query(
-      `INSERT INTO app_launches (fingerprint, ip, is_organic, campaign_id, launched_at)
-       SELECT $1::varchar, $2::varchar, $3::boolean, $4::varchar, NOW()
+      `INSERT INTO app_launches (fingerprint, ip, is_organic, campaign_id, platform, bundle_id, launched_at)
+       SELECT $1::varchar, $2::varchar, $3::boolean, $4::varchar, $5::varchar, $6::varchar, NOW()
        WHERE NOT EXISTS (
          SELECT 1 FROM app_launches WHERE fingerprint = $1::varchar AND DATE(launched_at) = DATE(NOW())
        )`,
-      [fingerprint, ip, isOrganic, campaignId]
+      [fingerprint, ip, isOrganic, campaignId, platform, bundleId]
     );
 
     // If this is a non-organic launch (campaign matched), upgrade any existing organic record for today
@@ -347,7 +351,25 @@ export class PostgresStorage implements IStorage {
     }
   }
 
-  async getActiveUserStats(): Promise<ActiveUserStats> {
+  async getActiveUserStats(filter?: ActiveUserFilter): Promise<ActiveUserStats> {
+    // Build WHERE clause based on filters
+    const conditions = ["launched_at >= NOW() - INTERVAL '30 days'"];
+    const params: any[] = [];
+    let paramIdx = 1;
+
+    if (filter?.platform) {
+      conditions.push(`platform = $${paramIdx}`);
+      params.push(filter.platform);
+      paramIdx++;
+    }
+    if (filter?.bundleId) {
+      conditions.push(`bundle_id = $${paramIdx}`);
+      params.push(filter.bundleId);
+      paramIdx++;
+    }
+
+    const whereClause = conditions.join(' AND ');
+
     // Totals
     const totalsResult = await this.pool.query(
       `SELECT
@@ -355,7 +377,8 @@ export class PostgresStorage implements IStorage {
         COUNT(*) FILTER (WHERE is_organic = FALSE)::int AS non_organic,
         COUNT(*) FILTER (WHERE is_organic = TRUE)::int AS organic
        FROM app_launches
-       WHERE launched_at >= NOW() - INTERVAL '30 days'`
+       WHERE ${whereClause}`,
+      params
     );
     const totals = totalsResult.rows[0] || { total_active_users: 0, non_organic: 0, organic: 0 };
 
@@ -367,9 +390,10 @@ export class PostgresStorage implements IStorage {
         COUNT(*) FILTER (WHERE is_organic = TRUE)::int AS organic,
         COUNT(*) FILTER (WHERE is_organic = FALSE)::int AS non_organic
        FROM app_launches
-       WHERE launched_at >= NOW() - INTERVAL '30 days'
+       WHERE ${whereClause}
        GROUP BY DATE(launched_at)
-       ORDER BY date`
+       ORDER BY date`,
+      params
     );
 
     return {
@@ -383,6 +407,16 @@ export class PostgresStorage implements IStorage {
         nonOrganic: row.non_organic,
       })),
     };
+  }
+
+  async getRegisteredApps(): Promise<RegisteredApp[]> {
+    const result = await this.pool.query(
+      `SELECT DISTINCT platform, bundle_id
+       FROM app_launches
+       WHERE bundle_id IS NOT NULL AND launched_at >= NOW() - INTERVAL '30 days'
+       ORDER BY platform, bundle_id`
+    );
+    return result.rows.map(row => ({ platform: row.platform, bundleId: row.bundle_id }));
   }
 
   async clearAppLaunches(): Promise<void> {

@@ -4,18 +4,32 @@ import * as campaignService from '../services/campaign.service';
 
 const router = Router();
 
-// GET /api/v1/stats/active-users - Get active user stats (30 days)
+// GET /api/v1/stats/active-users - Get active user stats (30 days), with optional filters
 router.get('/active-users', async (req: Request, res: Response): Promise<void> => {
   const storage = getStorage();
-  const stats = await storage.getActiveUserStats();
+  const platform = req.query.platform as string | undefined;
+  const bundleId = req.query.bundleId as string | undefined;
+
+  const filter: { platform?: string; bundleId?: string } = {};
+  if (platform) filter.platform = platform;
+  if (bundleId) filter.bundleId = bundleId;
+
+  const stats = await storage.getActiveUserStats(Object.keys(filter).length > 0 ? filter : undefined);
   res.json(stats);
+});
+
+// GET /api/v1/stats/apps - Get list of registered apps (platform + bundleId)
+router.get('/apps', async (req: Request, res: Response): Promise<void> => {
+  const storage = getStorage();
+  const apps = await storage.getRegisteredApps();
+  res.json({ apps });
 });
 
 // DELETE /api/v1/stats/active-users - Clear all active user data
 router.delete('/active-users', async (req: Request, res: Response): Promise<void> => {
   const storage = getStorage();
   await storage.clearAppLaunches();
-  res.json({ message: 'All active user data cleared' });
+  res.json({ message: 'All data cleared' });
 });
 
 // GET /api/v1/stats/:campaignId - Get daily click/install stats for a campaign

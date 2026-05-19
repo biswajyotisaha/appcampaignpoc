@@ -1,12 +1,14 @@
 import { Campaign } from '../models/campaign.model';
 import { ClickRecord } from '../models/click.model';
-import { IStorage, DailyStat, ActiveUserStats } from './storage.interface';
+import { IStorage, DailyStat, ActiveUserStats, ActiveUserFilter, RegisteredApp } from './storage.interface';
 
 interface AppLaunchRecord {
   fingerprint: string;
   ip: string;
   isOrganic: boolean;
   campaignId: string | null;
+  platform: string;
+  bundleId: string | null;
   launchedAt: Date;
 }
 
@@ -193,7 +195,7 @@ export class MemoryStorage implements IStorage {
 
   // --- Active Users (App Launches) ---
 
-  async recordAppLaunch(fingerprint: string, ip: string, isOrganic: boolean, campaignId: string | null): Promise<void> {
+  async recordAppLaunch(fingerprint: string, ip: string, isOrganic: boolean, campaignId: string | null, platform: string, bundleId: string | null): Promise<void> {
     const now = new Date();
     const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
@@ -213,14 +215,22 @@ export class MemoryStorage implements IStorage {
         existingToday.campaignId = campaignId;
       }
     } else {
-      this.appLaunches.push({ fingerprint, ip, isOrganic, campaignId, launchedAt: now });
+      this.appLaunches.push({ fingerprint, ip, isOrganic, campaignId, platform, bundleId, launchedAt: now });
     }
   }
 
-  async getActiveUserStats(): Promise<ActiveUserStats> {
+  async getActiveUserStats(filter?: ActiveUserFilter): Promise<ActiveUserStats> {
     const now = new Date();
     const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-    const recent = this.appLaunches.filter(l => l.launchedAt >= thirtyDaysAgo);
+    let recent = this.appLaunches.filter(l => l.launchedAt >= thirtyDaysAgo);
+
+    // Apply filters
+    if (filter?.platform) {
+      recent = recent.filter(l => l.platform === filter.platform);
+    }
+    if (filter?.bundleId) {
+      recent = recent.filter(l => l.bundleId === filter.bundleId);
+    }
 
     const uniqueFingerprints = new Set(recent.map(l => l.fingerprint));
     const nonOrganic = recent.filter(l => !l.isOrganic).length;
@@ -256,6 +266,23 @@ export class MemoryStorage implements IStorage {
       organicInstalls: organic,
       daily,
     };
+  }
+
+  async getRegisteredApps(): Promise<RegisteredApp[]> {
+    const now = new Date();
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const recent = this.appLaunches.filter(l => l.launchedAt >= thirtyDaysAgo && l.bundleId);
+
+    const seen = new Set<string>();
+    const apps: RegisteredApp[] = [];
+    for (const launch of recent) {
+      const key = `${launch.platform}|${launch.bundleId}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        apps.push({ platform: launch.platform, bundleId: launch.bundleId! });
+      }
+    }
+    return apps.sort((a, b) => a.platform.localeCompare(b.platform) || a.bundleId.localeCompare(b.bundleId));
   }
 
   async clearAppLaunches(): Promise<void> {

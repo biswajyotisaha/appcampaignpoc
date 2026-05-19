@@ -106,10 +106,26 @@ export interface ActiveUserStats {
   daily: ActiveUserDailyStat[];
 }
 
-export async function fetchActiveUserStats(): Promise<ActiveUserStats> {
-  const res = await fetch(`${BASE}/stats/active-users`);
+export interface RegisteredApp {
+  platform: string;
+  bundleId: string;
+}
+
+export async function fetchActiveUserStats(platform?: string, bundleId?: string): Promise<ActiveUserStats> {
+  const params = new URLSearchParams();
+  if (platform) params.set('platform', platform);
+  if (bundleId) params.set('bundleId', bundleId);
+  const qs = params.toString();
+  const res = await fetch(`${BASE}/stats/active-users${qs ? '?' + qs : ''}`);
   if (!res.ok) throw new Error('Failed to fetch active user stats');
   return res.json();
+}
+
+export async function fetchRegisteredApps(): Promise<RegisteredApp[]> {
+  const res = await fetch(`${BASE}/stats/apps`);
+  if (!res.ok) throw new Error('Failed to fetch registered apps');
+  const data = await res.json();
+  return data.apps;
 }
 
 export async function clearActiveUserData(): Promise<void> {

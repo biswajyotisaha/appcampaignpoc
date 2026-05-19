@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { matchAttribution } from '../services/attribution.service';
 import { generateFingerprint } from '../services/fingerprint.service';
+import { parseUserAgent } from '../utils/ua-parser';
 import { getStorage } from '../storage';
 import { logger } from '../utils/logger';
 
@@ -35,12 +36,14 @@ router.post('/match', async (req: Request, res: Response): Promise<void> => {
     || '';
 
   const installedAt = parsed.data?.installedAt || new Date().toISOString();
+  const bundleId = parsed.data?.bundleId || null;
 
   logger.info({
     source: 'attribution-match',
     ip,
     userAgent: userAgent.substring(0, 150),
     installedAt,
+    bundleId,
     headers: {
       'x-forwarded-for': req.headers['x-forwarded-for'],
       'user-agent': req.headers['user-agent']?.substring(0, 150),
@@ -49,6 +52,10 @@ router.post('/match', async (req: Request, res: Response): Promise<void> => {
 
   const result = await matchAttribution({ ip, userAgent, installedAt });
 
+  // Determine platform from User-Agent
+  const device = parseUserAgent(userAgent);
+  const platform = device.type; // 'ios' | 'android' | 'other'
+
   // Record app launch for active user tracking
   const fingerprint = generateFingerprint({ ip, userAgent });
   const storage = getStorage();
@@ -56,7 +63,9 @@ router.post('/match', async (req: Request, res: Response): Promise<void> => {
     fingerprint,
     ip,
     !result.matched, // organic = no campaign match
-    result.attribution?.campaignId || null
+    result.attribution?.campaignId || null,
+    platform,
+    bundleId
   );
 
   logger.info({
@@ -64,6 +73,8 @@ router.post('/match', async (req: Request, res: Response): Promise<void> => {
     matched: result.matched,
     campaignName: result.attribution?.campaignName || null,
     confidence: result.attribution?.matchConfidence || null,
+    platform,
+    bundleId,
   }, 'Attribution match result');
 
   res.json(result);
