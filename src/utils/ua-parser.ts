@@ -29,6 +29,11 @@ export function parseUserAgent(ua: string): ParsedDevice {
     type = 'android';
   }
 
+  // Native iOS apps use CFNetwork/Darwin UA — detect these as iOS
+  if (type === 'other' && ua.includes('CFNetwork') && ua.includes('Darwin')) {
+    type = 'ios';
+  }
+
   const normalized = `${type}|${osName}|${osVersion}|${deviceModel}`.toLowerCase();
 
   return { type, os: osName, osVersion, deviceModel, normalized };
