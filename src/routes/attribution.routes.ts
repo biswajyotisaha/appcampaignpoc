@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { matchAttribution } from '../services/attribution.service';
+import { logger } from '../utils/logger';
 
 const router = Router();
 
@@ -33,7 +34,26 @@ router.post('/match', async (req: Request, res: Response): Promise<void> => {
 
   const installedAt = parsed.data?.installedAt || new Date().toISOString();
 
+  logger.info({
+    source: 'attribution-match',
+    ip,
+    userAgent: userAgent.substring(0, 150),
+    installedAt,
+    headers: {
+      'x-forwarded-for': req.headers['x-forwarded-for'],
+      'user-agent': req.headers['user-agent']?.substring(0, 150),
+    },
+  }, 'Attribution match request received');
+
   const result = await matchAttribution({ ip, userAgent, installedAt });
+
+  logger.info({
+    source: 'attribution-match',
+    matched: result.matched,
+    campaignName: result.attribution?.campaignName || null,
+    confidence: result.attribution?.matchConfidence || null,
+  }, 'Attribution match result');
+
   res.json(result);
 });
 

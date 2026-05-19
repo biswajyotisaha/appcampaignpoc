@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { parseUserAgent } from '../utils/ua-parser';
+import { logger } from '../utils/logger';
 
 export interface FingerprintInput {
   ip: string;
@@ -14,5 +15,21 @@ export interface FingerprintInput {
 export function generateFingerprint(input: FingerprintInput): string {
   const parsed = parseUserAgent(input.userAgent);
   const raw = `${input.ip}|${parsed.normalized}`;
-  return crypto.createHash('sha256').update(raw).digest('hex');
+  const hash = crypto.createHash('sha256').update(raw).digest('hex');
+
+  logger.info({
+    ip: input.ip,
+    userAgent: input.userAgent.substring(0, 150),
+    parsed: {
+      type: parsed.type,
+      os: parsed.os,
+      osVersion: parsed.osVersion,
+      deviceModel: parsed.deviceModel,
+      normalized: parsed.normalized,
+    },
+    rawInput: raw,
+    fingerprint: hash.substring(0, 16) + '...',
+  }, 'Fingerprint generated');
+
+  return hash;
 }

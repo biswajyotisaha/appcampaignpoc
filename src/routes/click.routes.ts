@@ -37,7 +37,17 @@ router.get('/:slug', async (req: Request, res: Response): Promise<void> => {
     logger.error({ err, slug }, 'Failed to record click');
   });
 
-  logger.info({ slug, device, ip: ip.substring(0, 10) + '...' }, 'Click redirect');
+  logger.info({
+    source: 'click',
+    slug,
+    device,
+    ip,
+    userAgent: userAgent.substring(0, 150),
+    headers: {
+      'x-forwarded-for': req.headers['x-forwarded-for'],
+      'user-agent': req.headers['user-agent']?.substring(0, 150),
+    },
+  }, 'Click received');
 
   if (action.type === 'deeplink_page') {
     // Serve HTML interstitial that tries to open app, falls back to store
