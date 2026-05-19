@@ -1,6 +1,14 @@
 import { Campaign } from '../models/campaign.model';
 import { ClickRecord } from '../models/click.model';
-import { IStorage, DailyStat } from './storage.interface';
+import { IStorage, DailyStat, ActiveUserStats } from './storage.interface';
+
+interface AppLaunchRecord {
+  fingerprint: string;
+  ip: string;
+  isOrganic: boolean;
+  campaignId: string | null;
+  launchedAt: Date;
+}
 
 export class MemoryStorage implements IStorage {
   private campaigns: Map<string, Campaign> = new Map();
@@ -8,6 +16,7 @@ export class MemoryStorage implements IStorage {
   private clicksByFingerprint: Map<string, string[]> = new Map(); // fingerprint -> clickIds
   private slugToId: Map<string, string> = new Map(); // slug -> campaignId
   private installEvents: Map<string, Date[]> = new Map(); // campaignId -> timestamps
+  private appLaunches: AppLaunchRecord[] = [];
 
   // --- Campaigns ---
 
@@ -159,5 +168,70 @@ export class MemoryStorage implements IStorage {
     }
 
     return purged;
+  }
+
+  // --- Active Users (App Launches) ---
+
+  async recordAppLaunch(fingerprint: string, ip: string, isOrganic: boolean, campaignId: string | null): Promise<void> {
+    const now = new Date();
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+    // Purge old data
+    this.appLaunches = this.appLaunches.filter(l => l.launchedAt >= thirtyDaysAgo);
+
+    // Check if this fingerprint already launched today
+    const todayStr = now.toISOString().split('T')[0];
+    const alreadyToday = this.appLaunches.some(
+      l => l.fingerprint === fingerprint && l.launchedAt.toISOString().split('T')[0] === todayStr
+    );
+
+    if (!alreadyToday) {
+      this.appLaunches.push({ fingerprint, ip, isOrganic, campaignId, launchedAt: now });
+    }
+  }
+
+  async getActiveUserStats(): Promise<ActiveUserStats> {
+    const now = new Date();
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const recent = this.appLaunches.filter(l => l.launchedAt >= thirtyDaysAgo);
+
+    const uniqueFingerprints = new Set(recent.map(l => l.fingerprint));
+    const nonOrganic = recent.filter(l => !l.isOrganic).length;
+    const organic = recent.filter(l => l.isOrganic).length;
+
+    // Daily breakdown
+    const dailyMap: Record<string, { total: Set<string>; organic: number; nonOrganic: number }> = {};
+    for (const launch of recent) {
+      const date = launch.launchedAt.toISOString().split('T')[0];
+      if (!dailyMap[date]) {
+        dailyMap[date] = { total: new Set(), organic: 0, nonOrganic: 0 };
+      }
+      dailyMap[date].total.add(launch.fingerprint);
+      if (launch.isOrganic) {
+        dailyMap[date].organic += 1;
+      } else {
+        dailyMap[date].nonOrganic += 1;
+      }
+    }
+
+    const daily = Object.entries(dailyMap)
+      .map(([date, data]) => ({
+        date,
+        total: data.total.size,
+        organic: data.organic,
+        nonOrganic: data.nonOrganic,
+      }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+
+    return {
+      totalActiveUsers: uniqueFingerprints.size,
+      nonOrganicInstalls: nonOrganic,
+      organicInstalls: organic,
+      daily,
+    };
+  }
+
+  async clearAppLaunches(): Promise<void> {
+    this.appLaunches = [];
   }
 }

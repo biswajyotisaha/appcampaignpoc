@@ -7,6 +7,20 @@ export interface DailyStat {
   installs: number;
 }
 
+export interface ActiveUserDailyStat {
+  date: string;
+  total: number;
+  organic: number;
+  nonOrganic: number;
+}
+
+export interface ActiveUserStats {
+  totalActiveUsers: number;
+  nonOrganicInstalls: number;
+  organicInstalls: number;
+  daily: ActiveUserDailyStat[];
+}
+
 export interface IStorage {
   // Campaigns
   createCampaign(campaign: Campaign): Promise<Campaign>;
@@ -28,4 +42,9 @@ export interface IStorage {
   getClicksByCampaignId(campaignId: string): Promise<ClickRecord[]>;
   markClickConsumed(clickId: string): Promise<void>;
   purgeExpiredClicks(): Promise<number>;
+
+  // Active Users (app launches)
+  recordAppLaunch(fingerprint: string, ip: string, isOrganic: boolean, campaignId: string | null): Promise<void>;
+  getActiveUserStats(): Promise<ActiveUserStats>;
+  clearAppLaunches(): Promise<void>;
 }

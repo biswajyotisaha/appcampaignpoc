@@ -89,3 +89,30 @@ export async function fetchCampaignStats(campaignId: string): Promise<CampaignSt
   if (!res.ok) throw new Error('Failed to fetch stats');
   return res.json();
 }
+
+// --- Active Users ---
+
+export interface ActiveUserDailyStat {
+  date: string;
+  total: number;
+  organic: number;
+  nonOrganic: number;
+}
+
+export interface ActiveUserStats {
+  totalActiveUsers: number;
+  nonOrganicInstalls: number;
+  organicInstalls: number;
+  daily: ActiveUserDailyStat[];
+}
+
+export async function fetchActiveUserStats(): Promise<ActiveUserStats> {
+  const res = await fetch(`${BASE}/stats/active-users`);
+  if (!res.ok) throw new Error('Failed to fetch active user stats');
+  return res.json();
+}
+
+export async function clearActiveUserData(): Promise<void> {
+  const res = await fetch(`${BASE}/stats/active-users`, { method: 'DELETE' });
+  if (!res.ok) throw new Error('Failed to clear active user data');
+}

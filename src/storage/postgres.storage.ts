@@ -1,7 +1,7 @@
 import { Pool } from 'pg';
 import { Campaign } from '../models/campaign.model';
 import { ClickRecord } from '../models/click.model';
-import { IStorage, DailyStat } from './storage.interface';
+import { IStorage, DailyStat, ActiveUserStats } from './storage.interface';
 import { logger } from '../utils/logger';
 
 const SCHEMA_SQL = `
@@ -44,6 +44,17 @@ CREATE INDEX IF NOT EXISTS idx_clicks_campaign_id ON clicks(campaign_id);
 CREATE INDEX IF NOT EXISTS idx_clicks_expires_at ON clicks(expires_at);
 CREATE INDEX IF NOT EXISTS idx_install_events_campaign_id ON install_events(campaign_id);
 CREATE INDEX IF NOT EXISTS idx_campaigns_slug ON campaigns(slug);
+
+CREATE TABLE IF NOT EXISTS app_launches (
+  id SERIAL PRIMARY KEY,
+  fingerprint VARCHAR(128) NOT NULL,
+  ip VARCHAR(45) NOT NULL,
+  is_organic BOOLEAN NOT NULL DEFAULT TRUE,
+  campaign_id VARCHAR(36) DEFAULT NULL,
+  launched_at TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_app_launches_launched_at ON app_launches(launched_at);
+CREATE INDEX IF NOT EXISTS idx_app_launches_fingerprint_date ON app_launches(fingerprint, (DATE(launched_at)));
 `;
 
 export class PostgresStorage implements IStorage {
@@ -243,6 +254,65 @@ export class PostgresStorage implements IStorage {
       'DELETE FROM clicks WHERE expires_at < NOW()'
     );
     return result.rowCount ?? 0;
+  }
+
+  // --- Active Users (App Launches) ---
+
+  async recordAppLaunch(fingerprint: string, ip: string, isOrganic: boolean, campaignId: string | null): Promise<void> {
+    // Purge old data (older than 30 days)
+    await this.pool.query("DELETE FROM app_launches WHERE launched_at < NOW() - INTERVAL '30 days'");
+
+    // Insert only if this fingerprint hasn't launched today (one per day per device)
+    await this.pool.query(
+      `INSERT INTO app_launches (fingerprint, ip, is_organic, campaign_id, launched_at)
+       SELECT $1, $2, $3, $4, NOW()
+       WHERE NOT EXISTS (
+         SELECT 1 FROM app_launches WHERE fingerprint = $1 AND DATE(launched_at) = DATE(NOW())
+       )`,
+      [fingerprint, ip, isOrganic, campaignId]
+    );
+  }
+
+  async getActiveUserStats(): Promise<ActiveUserStats> {
+    // Totals
+    const totalsResult = await this.pool.query(
+      `SELECT
+        COUNT(DISTINCT fingerprint)::int AS total_active_users,
+        COUNT(*) FILTER (WHERE is_organic = FALSE)::int AS non_organic,
+        COUNT(*) FILTER (WHERE is_organic = TRUE)::int AS organic
+       FROM app_launches
+       WHERE launched_at >= NOW() - INTERVAL '30 days'`
+    );
+    const totals = totalsResult.rows[0] || { total_active_users: 0, non_organic: 0, organic: 0 };
+
+    // Daily breakdown
+    const dailyResult = await this.pool.query(
+      `SELECT
+        DATE(launched_at) AS date,
+        COUNT(DISTINCT fingerprint)::int AS total,
+        COUNT(*) FILTER (WHERE is_organic = TRUE)::int AS organic,
+        COUNT(*) FILTER (WHERE is_organic = FALSE)::int AS non_organic
+       FROM app_launches
+       WHERE launched_at >= NOW() - INTERVAL '30 days'
+       GROUP BY DATE(launched_at)
+       ORDER BY date`
+    );
+
+    return {
+      totalActiveUsers: totals.total_active_users,
+      nonOrganicInstalls: totals.non_organic,
+      organicInstalls: totals.organic,
+      daily: dailyResult.rows.map(row => ({
+        date: row.date.toISOString().split('T')[0],
+        total: row.total,
+        organic: row.organic,
+        nonOrganic: row.non_organic,
+      })),
+    };
+  }
+
+  async clearAppLaunches(): Promise<void> {
+    await this.pool.query('TRUNCATE app_launches');
   }
 
   // --- Helpers ---

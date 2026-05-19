@@ -1,6 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { matchAttribution } from '../services/attribution.service';
+import { generateFingerprint } from '../services/fingerprint.service';
+import { getStorage } from '../storage';
 import { logger } from '../utils/logger';
 
 const router = Router();
@@ -46,6 +48,16 @@ router.post('/match', async (req: Request, res: Response): Promise<void> => {
   }, 'Attribution match request received');
 
   const result = await matchAttribution({ ip, userAgent, installedAt });
+
+  // Record app launch for active user tracking
+  const fingerprint = generateFingerprint({ ip, userAgent });
+  const storage = getStorage();
+  await storage.recordAppLaunch(
+    fingerprint,
+    ip,
+    !result.matched, // organic = no campaign match
+    result.attribution?.campaignId || null
+  );
 
   logger.info({
     source: 'attribution-match',
