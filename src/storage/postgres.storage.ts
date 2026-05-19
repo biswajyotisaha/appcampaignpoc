@@ -265,9 +265,9 @@ export class PostgresStorage implements IStorage {
     // Insert only if this fingerprint hasn't launched today (one per day per device)
     await this.pool.query(
       `INSERT INTO app_launches (fingerprint, ip, is_organic, campaign_id, launched_at)
-       SELECT $1, $2, $3, $4, NOW()
+       SELECT $1::varchar, $2::varchar, $3::boolean, $4::varchar, NOW()
        WHERE NOT EXISTS (
-         SELECT 1 FROM app_launches WHERE fingerprint = $1 AND DATE(launched_at) = DATE(NOW())
+         SELECT 1 FROM app_launches WHERE fingerprint = $1::varchar AND DATE(launched_at) = DATE(NOW())
        )`,
       [fingerprint, ip, isOrganic, campaignId]
     );
