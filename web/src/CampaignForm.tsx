@@ -53,8 +53,8 @@ export default function CampaignForm({ onSubmit, onCancel }: Props) {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-      <h2 className="text-lg font-semibold text-gray-900 mb-4">Create New Campaign</h2>
+    <form onSubmit={handleSubmit} className="bg-white rounded-lg border border-gray-200 p-6">
+      <h2 className="text-base font-semibold text-gray-900 mb-4">Create New Campaign</h2>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Name */}
@@ -66,7 +66,7 @@ export default function CampaignForm({ onSubmit, onCancel }: Props) {
             value={name}
             onChange={(e) => handleNameChange(e.target.value)}
             placeholder="e.g., Sleep Wellness Q3"
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+            className="w-full px-3 py-2 border border-gray-200 rounded-md text-sm focus:ring-2 focus:ring-[#1a1f36] focus:border-[#1a1f36] outline-none"
           />
         </div>
 
@@ -80,7 +80,7 @@ export default function CampaignForm({ onSubmit, onCancel }: Props) {
             onChange={(e) => setSlug(e.target.value)}
             placeholder="e.g., sleep-wellness-q3"
             pattern="[a-z0-9-]+"
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none font-mono"
+            className="w-full px-3 py-2 border border-gray-200 rounded-md text-sm focus:ring-2 focus:ring-[#1a1f36] focus:border-[#1a1f36] outline-none font-mono"
           />
           <p className="text-xs text-gray-400 mt-1">Lowercase letters, numbers, hyphens only</p>
         </div>
@@ -94,7 +94,7 @@ export default function CampaignForm({ onSubmit, onCancel }: Props) {
             value={iosUrl}
             onChange={(e) => setIosUrl(e.target.value)}
             placeholder="https://apps.apple.com/app/id123456"
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+            className="w-full px-3 py-2 border border-gray-200 rounded-md text-sm focus:ring-2 focus:ring-[#1a1f36] focus:border-[#1a1f36] outline-none"
           />
         </div>
 
@@ -107,7 +107,7 @@ export default function CampaignForm({ onSubmit, onCancel }: Props) {
             value={androidUrl}
             onChange={(e) => setAndroidUrl(e.target.value)}
             placeholder="https://play.google.com/store/apps/details?id=com.example"
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+            className="w-full px-3 py-2 border border-gray-200 rounded-md text-sm focus:ring-2 focus:ring-[#1a1f36] focus:border-[#1a1f36] outline-none"
           />
         </div>
 
@@ -120,7 +120,7 @@ export default function CampaignForm({ onSubmit, onCancel }: Props) {
             value={fallbackUrl}
             onChange={(e) => setFallbackUrl(e.target.value)}
             placeholder="https://example.com/landing"
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+            className="w-full px-3 py-2 border border-gray-200 rounded-md text-sm focus:ring-2 focus:ring-[#1a1f36] focus:border-[#1a1f36] outline-none"
           />
         </div>
 
@@ -132,7 +132,7 @@ export default function CampaignForm({ onSubmit, onCancel }: Props) {
             value={source}
             onChange={(e) => setSource(e.target.value)}
             placeholder="e.g., facebook, google, email"
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+            className="w-full px-3 py-2 border border-gray-200 rounded-md text-sm focus:ring-2 focus:ring-[#1a1f36] focus:border-[#1a1f36] outline-none"
           />
           <p className="text-xs text-gray-400 mt-1">Optional. Traffic source for attribution</p>
         </div>
@@ -145,7 +145,7 @@ export default function CampaignForm({ onSubmit, onCancel }: Props) {
             value={topic}
             onChange={(e) => setTopic(e.target.value)}
             placeholder="e.g., sleep, diabetes, wellness"
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+            className="w-full px-3 py-2 border border-gray-200 rounded-md text-sm focus:ring-2 focus:ring-[#1a1f36] focus:border-[#1a1f36] outline-none"
           />
           <p className="text-xs text-gray-400 mt-1">Optional. Campaign topic for categorization</p>
         </div>
@@ -156,7 +156,7 @@ export default function CampaignForm({ onSubmit, onCancel }: Props) {
         <button
           type="button"
           onClick={() => setShowDeepLink(!showDeepLink)}
-          className="flex items-center gap-2 text-sm font-medium text-indigo-600 hover:text-indigo-700"
+          className="flex items-center gap-2 text-sm font-medium text-[#4f86f7] hover:text-[#3a6dd6]"
         >
           <svg className={`w-4 h-4 transition-transform ${showDeepLink ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -210,7 +210,7 @@ export default function CampaignForm({ onSubmit, onCancel }: Props) {
                   value={iosScheme}
                   onChange={(e) => setIosScheme(e.target.value)}
                   placeholder="e.g., myapp"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none font-mono"
+                  className="w-full px-3 py-2 border border-gray-200 rounded-md text-sm focus:ring-2 focus:ring-[#1a1f36] focus:border-[#1a1f36] outline-none font-mono"
                 />
                 <p className="text-xs text-gray-400 mt-1">The CFBundleURLSchemes value from your Info.plist</p>
               </div>
@@ -223,7 +223,7 @@ export default function CampaignForm({ onSubmit, onCancel }: Props) {
                   value={androidPackage}
                   onChange={(e) => setAndroidPackage(e.target.value)}
                   placeholder="e.g., com.company.myapp"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none font-mono"
+                  className="w-full px-3 py-2 border border-gray-200 rounded-md text-sm focus:ring-2 focus:ring-[#1a1f36] focus:border-[#1a1f36] outline-none font-mono"
                 />
                 <p className="text-xs text-gray-400 mt-1">The android:scheme value from your AndroidManifest.xml</p>
               </div>
@@ -236,7 +236,7 @@ export default function CampaignForm({ onSubmit, onCancel }: Props) {
                   value={deepLinkPath}
                   onChange={(e) => setDeepLinkPath(e.target.value)}
                   placeholder="/campaign/{slug}"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none font-mono"
+                  className="w-full px-3 py-2 border border-gray-200 rounded-md text-sm focus:ring-2 focus:ring-[#1a1f36] focus:border-[#1a1f36] outline-none font-mono"
                 />
                 <p className="text-xs text-gray-400 mt-1">Path inside the app. Use {'{slug}'} as a placeholder for the campaign slug. Default: /campaign/{'{slug}'}</p>
               </div>
@@ -249,14 +249,14 @@ export default function CampaignForm({ onSubmit, onCancel }: Props) {
       <div className="flex items-center gap-3 mt-6 pt-4 border-t border-gray-100">
         <button
           type="submit"
-          className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
+          className="px-4 py-2 bg-[#1a1f36] text-white text-sm font-medium rounded-md hover:bg-[#2d3354] transition-colors"
         >
           Create Campaign
         </button>
         <button
           type="button"
           onClick={onCancel}
-          className="px-4 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors"
+          className="px-4 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-md hover:bg-gray-200 transition-colors"
         >
           Cancel
         </button>

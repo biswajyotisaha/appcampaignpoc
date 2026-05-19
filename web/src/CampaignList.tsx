@@ -14,9 +14,11 @@ export default function CampaignList({ campaigns, onDelete, onViewStats }: Props
   if (campaigns.length === 0) {
     return (
       <div className="text-center py-16">
-        <div className="text-5xl mb-4">&#128640;</div>
-        <h3 className="text-lg font-medium text-gray-900">No campaigns yet</h3>
-        <p className="text-gray-500 mt-1">Create your first campaign to start tracking installs</p>
+        <svg className="mx-auto w-12 h-12 text-gray-300 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+        </svg>
+        <h3 className="text-base font-medium text-gray-900">No campaigns yet</h3>
+        <p className="text-sm text-gray-500 mt-1">Create your first campaign to start tracking installs</p>
       </div>
     );
   }
@@ -31,26 +33,26 @@ export default function CampaignList({ campaigns, onDelete, onViewStats }: Props
 
   return (
     <div className="space-y-4">
-      <h2 className="text-lg font-semibold text-gray-900">
-        Campaigns <span className="text-gray-400 font-normal">({campaigns.length})</span>
-      </h2>
+      <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wider">
+        All Campaigns <span className="text-gray-400 font-normal">({campaigns.length})</span>
+      </h3>
 
       <div className="grid gap-4">
         {campaigns.map((campaign) => (
           <div
             key={campaign.id}
-            className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 hover:shadow-md transition-shadow"
+            className="bg-white rounded-lg border border-gray-200 p-5 hover:border-gray-300 transition-colors"
           >
             <div className="flex items-start justify-between">
               <div className="flex-1 min-w-0">
-                <h3 className="text-base font-semibold text-gray-900 truncate">{campaign.name}</h3>
-                <p className="text-sm text-gray-500 mt-0.5 font-mono">/{campaign.slug}</p>
+                <h3 className="text-sm font-semibold text-gray-900 truncate">{campaign.name}</h3>
+                <p className="text-xs text-gray-400 mt-0.5 font-mono">/{campaign.slug}</p>
               </div>
               <div className="flex items-center gap-2 ml-4">
-                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700">
                   {campaign.clickCount} clicks
                 </span>
-                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700">
                   {campaign.installCount} installs
                 </span>
               </div>
@@ -58,12 +60,12 @@ export default function CampaignList({ campaigns, onDelete, onViewStats }: Props
 
             {/* Tracking Link */}
             <div className="mt-3 flex items-center gap-2">
-              <code className="flex-1 text-xs bg-gray-50 px-3 py-2 rounded-lg border border-gray-200 text-gray-700 truncate">
+              <code className="flex-1 text-xs bg-[#f5f6fa] px-3 py-2 rounded border border-gray-200 text-gray-600 truncate">
                 {campaign.trackingLink}
               </code>
               <button
                 onClick={() => copyLink(campaign)}
-                className="px-3 py-2 text-xs font-medium bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors whitespace-nowrap"
+                className="px-3 py-2 text-xs font-medium bg-gray-100 text-gray-600 rounded hover:bg-gray-200 transition-colors whitespace-nowrap"
               >
                 {copiedId === campaign.id ? 'Copied!' : 'Copy'}
               </button>
@@ -91,7 +93,7 @@ export default function CampaignList({ campaigns, onDelete, onViewStats }: Props
                 {Object.entries(campaign.metadata).map(([key, value]) => (
                   <span
                     key={key}
-                    className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-indigo-50 text-indigo-700 border border-indigo-100"
+                    className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-gray-50 text-gray-600 border border-gray-200"
                   >
                     {key}: {value}
                   </span>
@@ -103,17 +105,17 @@ export default function CampaignList({ campaigns, onDelete, onViewStats }: Props
             <div className="mt-3">
               <button
                 onClick={() => setExpandedGuide(expandedGuide === campaign.id ? null : campaign.id)}
-                className="text-xs font-medium text-indigo-600 hover:text-indigo-800 transition-colors"
+                className="text-xs font-medium text-[#4f86f7] hover:text-[#3a6dd6] transition-colors"
               >
                 {expandedGuide === campaign.id ? 'Hide' : 'Show'} Integration Guide
               </button>
 
               {expandedGuide === campaign.id && (
-                <div className="mt-2 bg-gray-50 rounded-lg border border-gray-200 p-4 text-xs">
+                <div className="mt-2 bg-[#f5f6fa] rounded-lg border border-gray-200 p-4 text-xs">
                   <h4 className="font-semibold text-gray-900 mb-2">Mobile App Integration</h4>
                   <p className="text-gray-600 mb-3">
                     Call this endpoint from your app on first launch to retrieve campaign context.
-                    The server automatically detects the device's IP and User-Agent from the request headers — no manual setup needed.
+                    The server automatically detects the device's IP and User-Agent from the request headers.
                   </p>
 
                   <div className="mb-2 font-medium text-gray-700">Endpoint:</div>
@@ -121,7 +123,7 @@ export default function CampaignList({ campaigns, onDelete, onViewStats }: Props
                     POST {baseUrl}/api/v1/attribution/match
                   </code>
 
-                  <div className="mb-2 font-medium text-gray-700">Request (minimal — just call it, no body needed):</div>
+                  <div className="mb-2 font-medium text-gray-700">Request (minimal):</div>
                   <pre className="bg-white px-3 py-2 rounded border border-gray-200 text-gray-800 mb-3 overflow-x-auto">
 {`fetch("${baseUrl}/api/v1/attribution/match", {
   method: "POST",
@@ -167,7 +169,7 @@ let attribution = try JSONDecoder().decode(AttributionResponse.self, from: data)
               <div className="flex items-center gap-3">
                 <button
                   onClick={() => onViewStats(campaign)}
-                  className="text-xs text-indigo-500 hover:text-indigo-700 font-medium transition-colors"
+                  className="text-xs text-[#4f86f7] hover:text-[#3a6dd6] font-medium transition-colors"
                 >
                   View Stats
                 </button>

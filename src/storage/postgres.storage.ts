@@ -237,12 +237,12 @@ export class PostgresStorage implements IStorage {
   async createClickIfNotDuplicate(click: ClickRecord): Promise<boolean> {
     const result = await this.pool.query(
       `INSERT INTO clicks (id, campaign_id, fingerprint, ip, user_agent, device, referer, clicked_at, expires_at, consumed)
-       SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
+       SELECT $1::uuid, $2::uuid, $3::varchar, $4::varchar, $5::text, $6::varchar, $7::text, $8::timestamptz, $9::timestamptz, $10::boolean
        WHERE NOT EXISTS (
          SELECT 1 FROM clicks
-         WHERE fingerprint = $3
-           AND campaign_id = $2
-           AND clicked_at > NOW() - INTERVAL '10 seconds'
+         WHERE fingerprint = $3::varchar
+           AND campaign_id = $2::uuid
+           AND clicked_at > NOW() - INTERVAL '6 seconds'
        )`,
       [
         click.id,
@@ -301,7 +301,7 @@ export class PostgresStorage implements IStorage {
     // Purge old data (older than 30 days)
     await this.pool.query("DELETE FROM app_launches WHERE launched_at < NOW() - INTERVAL '30 days'");
 
-    // Insert only if this fingerprint hasn't launched today (one per day per device)
+    // Insert only if this fingerprint hasn't launched today
     await this.pool.query(
       `INSERT INTO app_launches (fingerprint, ip, is_organic, campaign_id, launched_at)
        SELECT $1::varchar, $2::varchar, $3::boolean, $4::varchar, NOW()
@@ -310,6 +310,15 @@ export class PostgresStorage implements IStorage {
        )`,
       [fingerprint, ip, isOrganic, campaignId]
     );
+
+    // If this is a non-organic launch (campaign matched), upgrade any existing organic record for today
+    if (!isOrganic) {
+      await this.pool.query(
+        `UPDATE app_launches SET is_organic = FALSE, campaign_id = $2::varchar
+         WHERE fingerprint = $1::varchar AND DATE(launched_at) = DATE(NOW()) AND is_organic = TRUE`,
+        [fingerprint, campaignId]
+      );
+    }
   }
 
   async getActiveUserStats(): Promise<ActiveUserStats> {

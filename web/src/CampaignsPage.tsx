@@ -16,7 +16,6 @@ export default function CampaignsPage() {
       setLoading(true);
       const data = await fetchCampaigns();
       setCampaigns(data);
-      // Auto-select first campaign if none selected or current selection was deleted
       if (data.length > 0 && (!selectedCampaignId || !data.find(c => c.id === selectedCampaignId))) {
         setSelectedCampaignId(data[0].id);
       } else if (data.length === 0) {
@@ -61,18 +60,17 @@ export default function CampaignsPage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-xl font-bold text-gray-900">Campaigns</h2>
-          <p className="text-sm text-gray-500 mt-0.5">Manage campaigns and track installs</p>
+          <h2 className="text-xl font-semibold text-gray-900">Campaigns</h2>
+          <p className="text-sm text-gray-500 mt-1">Manage campaigns and track installs</p>
         </div>
         <button
           onClick={() => setShowForm(!showForm)}
-          className="inline-flex items-center px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors shadow-sm"
+          className="inline-flex items-center px-4 py-2 bg-[#1a1f36] text-white text-sm font-medium rounded-md hover:bg-[#2d3354] transition-colors"
         >
           {showForm ? 'Cancel' : '+ New Campaign'}
         </button>
       </div>
 
-      {/* Error Banner */}
       {error && (
         <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm flex items-center justify-between">
           <span>{error}</span>
@@ -84,14 +82,14 @@ export default function CampaignsPage() {
       {!loading && campaigns.length > 0 && (
         <div className="mb-8">
           <div className="mb-3">
-            <label htmlFor="campaign-select" className="text-sm font-medium text-gray-700 mr-2">
+            <label htmlFor="campaign-select" className="text-sm font-medium text-gray-600 mr-2">
               Campaign Analytics:
             </label>
             <select
               id="campaign-select"
               value={selectedCampaignId || ''}
               onChange={(e) => setSelectedCampaignId(e.target.value)}
-              className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+              className="px-3 py-1.5 border border-gray-200 rounded-md text-sm bg-white focus:ring-2 focus:ring-[#1a1f36] focus:border-[#1a1f36]"
             >
               {campaigns.map((c) => (
                 <option key={c.id} value={c.id}>
@@ -115,7 +113,7 @@ export default function CampaignsPage() {
 
       {/* Campaign List */}
       {loading ? (
-        <div className="text-center py-12 text-gray-500">Loading campaigns...</div>
+        <div className="text-center py-12 text-gray-400">Loading campaigns...</div>
       ) : (
         <CampaignList
           campaigns={campaigns}

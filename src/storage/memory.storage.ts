@@ -130,7 +130,7 @@ export class MemoryStorage implements IStorage {
       const existing = this.clicks.get(id);
       return existing &&
         existing.campaignId === click.campaignId &&
-        (now - existing.clickedAt.getTime()) < 10_000;
+        (now - existing.clickedAt.getTime()) < 6_000;
     });
 
     if (hasDuplicate) return false;
@@ -198,11 +198,17 @@ export class MemoryStorage implements IStorage {
 
     // Check if this fingerprint already launched today
     const todayStr = now.toISOString().split('T')[0];
-    const alreadyToday = this.appLaunches.some(
+    const existingToday = this.appLaunches.find(
       l => l.fingerprint === fingerprint && l.launchedAt.toISOString().split('T')[0] === todayStr
     );
 
-    if (!alreadyToday) {
+    if (existingToday) {
+      // Upgrade organic -> non-organic if a campaign match was found
+      if (existingToday.isOrganic && !isOrganic) {
+        existingToday.isOrganic = false;
+        existingToday.campaignId = campaignId;
+      }
+    } else {
       this.appLaunches.push({ fingerprint, ip, isOrganic, campaignId, launchedAt: now });
     }
   }

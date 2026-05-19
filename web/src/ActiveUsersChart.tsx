@@ -1,5 +1,5 @@
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts';
 import { ActiveUserDailyStat } from './api';
 
@@ -19,74 +19,74 @@ export default function ActiveUsersChart({ daily }: Props) {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {/* Daily Active Users */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
-        <h3 className="text-sm font-semibold text-gray-700 mb-4">Daily Active Users (30 days)</h3>
+      <div className="bg-white rounded-lg border border-gray-200 p-5">
+        <h3 className="text-sm font-semibold text-gray-900 mb-1">Daily Active Users</h3>
+        <p className="text-xs text-gray-400 mb-4">Last 30 days</p>
         <ResponsiveContainer width="100%" height={220}>
-          <LineChart data={daily} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+          <BarChart data={daily} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#eee" vertical={false} />
             <XAxis
               dataKey="date"
-              tick={{ fontSize: 10 }}
+              tick={{ fontSize: 10, fill: '#9ca3af' }}
               tickFormatter={(val) => {
                 const d = new Date(val + 'T00:00:00');
-                return `${d.getMonth() + 1}/${d.getDate()}`;
+                return `${d.toLocaleString('default', { month: 'short' })} ${d.getDate()}`;
               }}
+              axisLine={false}
+              tickLine={false}
             />
-            <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+            <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} allowDecimals={false} axisLine={false} tickLine={false} />
             <Tooltip
               labelFormatter={(val) => `Date: ${val}`}
-              contentStyle={{ fontSize: 12, borderRadius: 8 }}
+              contentStyle={{ fontSize: 12, borderRadius: 6, border: '1px solid #e5e7eb' }}
             />
             <Legend wrapperStyle={{ fontSize: 12 }} />
-            <Line
-              type="monotone"
+            <Bar
               dataKey="total"
-              stroke="#6366f1"
-              strokeWidth={2}
-              dot={{ r: 3 }}
-              name="Unique Users"
+              fill="#4f86f7"
+              radius={[3, 3, 0, 0]}
+              name="Active Users"
             />
-          </LineChart>
+          </BarChart>
         </ResponsiveContainer>
       </div>
 
       {/* Organic vs Non-Organic */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
-        <h3 className="text-sm font-semibold text-gray-700 mb-4">Organic vs Non-Organic (30 days)</h3>
+      <div className="bg-white rounded-lg border border-gray-200 p-5">
+        <h3 className="text-sm font-semibold text-gray-900 mb-1">Organic vs Non-Organic</h3>
+        <p className="text-xs text-gray-400 mb-4">Attribution breakdown</p>
         <ResponsiveContainer width="100%" height={220}>
-          <LineChart data={daily} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+          <BarChart data={daily} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#eee" vertical={false} />
             <XAxis
               dataKey="date"
-              tick={{ fontSize: 10 }}
+              tick={{ fontSize: 10, fill: '#9ca3af' }}
               tickFormatter={(val) => {
                 const d = new Date(val + 'T00:00:00');
-                return `${d.getMonth() + 1}/${d.getDate()}`;
+                return `${d.toLocaleString('default', { month: 'short' })} ${d.getDate()}`;
               }}
+              axisLine={false}
+              tickLine={false}
             />
-            <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+            <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} allowDecimals={false} axisLine={false} tickLine={false} />
             <Tooltip
               labelFormatter={(val) => `Date: ${val}`}
-              contentStyle={{ fontSize: 12, borderRadius: 8 }}
+              contentStyle={{ fontSize: 12, borderRadius: 6, border: '1px solid #e5e7eb' }}
             />
             <Legend wrapperStyle={{ fontSize: 12 }} />
-            <Line
-              type="monotone"
+            <Bar
               dataKey="organic"
-              stroke="#10b981"
-              strokeWidth={2}
-              dot={{ r: 3 }}
+              fill="#34d399"
+              radius={[3, 3, 0, 0]}
               name="Organic"
             />
-            <Line
-              type="monotone"
+            <Bar
               dataKey="nonOrganic"
-              stroke="#3b82f6"
-              strokeWidth={2}
-              dot={{ r: 3 }}
+              fill="#4f86f7"
+              radius={[3, 3, 0, 0]}
               name="Non-Organic"
             />
-          </LineChart>
+          </BarChart>
         </ResponsiveContainer>
       </div>
     </div>

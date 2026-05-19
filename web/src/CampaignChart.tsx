@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts';
 import { Campaign, CampaignStats, fetchCampaignStats } from './api';
 
@@ -21,14 +21,14 @@ export default function CampaignChart({ campaign, onClose }: Props) {
   }, [campaign.id]);
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+    <div className="bg-white rounded-lg border border-gray-200 p-5">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-base font-semibold text-gray-900">
-          Analytics: {campaign.name}
+        <h3 className="text-sm font-semibold text-gray-900">
+          {campaign.name}
         </h3>
         <button
           onClick={onClose}
-          className="text-xs text-gray-500 hover:text-gray-700 font-medium"
+          className="text-xs text-gray-400 hover:text-gray-600 font-medium"
         >
           Close
         </button>
@@ -40,15 +40,15 @@ export default function CampaignChart({ campaign, onClose }: Props) {
 
       {!loading && (!stats || stats.daily.length === 0) && (
         <div className="text-center py-8">
-          <p className="text-gray-500 text-sm">No data yet. Clicks and installs will appear here once activity is recorded.</p>
+          <p className="text-gray-400 text-sm">No data yet. Activity will appear here once recorded.</p>
           <div className="mt-3 grid grid-cols-2 gap-4 max-w-xs mx-auto">
-            <div className="bg-green-50 rounded-lg p-3 text-center">
-              <div className="text-2xl font-bold text-green-700">{campaign.clickCount}</div>
-              <div className="text-xs text-green-600">Total Clicks</div>
+            <div className="bg-gray-50 rounded-md p-3 text-center border border-gray-100">
+              <div className="text-2xl font-bold text-gray-900">{campaign.clickCount}</div>
+              <div className="text-xs text-gray-500">Total Clicks</div>
             </div>
-            <div className="bg-blue-50 rounded-lg p-3 text-center">
-              <div className="text-2xl font-bold text-blue-700">{campaign.installCount}</div>
-              <div className="text-xs text-blue-600">Total Installs</div>
+            <div className="bg-gray-50 rounded-md p-3 text-center border border-gray-100">
+              <div className="text-2xl font-bold text-gray-900">{campaign.installCount}</div>
+              <div className="text-xs text-gray-500">Total Installs</div>
             </div>
           </div>
         </div>
@@ -57,50 +57,48 @@ export default function CampaignChart({ campaign, onClose }: Props) {
       {!loading && stats && stats.daily.length > 0 && (
         <>
           <div className="grid grid-cols-2 gap-4 mb-4 max-w-xs">
-            <div className="bg-green-50 rounded-lg p-3 text-center">
-              <div className="text-2xl font-bold text-green-700">{stats.totalClicks}</div>
-              <div className="text-xs text-green-600">Total Clicks</div>
+            <div className="bg-gray-50 rounded-md p-3 text-center border border-gray-100">
+              <div className="text-2xl font-bold text-gray-900">{stats.totalClicks}</div>
+              <div className="text-xs text-gray-500">Total Clicks</div>
             </div>
-            <div className="bg-blue-50 rounded-lg p-3 text-center">
-              <div className="text-2xl font-bold text-blue-700">{stats.totalInstalls}</div>
-              <div className="text-xs text-blue-600">Total Installs</div>
+            <div className="bg-gray-50 rounded-md p-3 text-center border border-gray-100">
+              <div className="text-2xl font-bold text-gray-900">{stats.totalInstalls}</div>
+              <div className="text-xs text-gray-500">Total Installs</div>
             </div>
           </div>
 
           <ResponsiveContainer width="100%" height={250}>
-            <LineChart data={stats.daily} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+            <BarChart data={stats.daily} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#eee" vertical={false} />
               <XAxis
                 dataKey="date"
-                tick={{ fontSize: 11 }}
+                tick={{ fontSize: 10, fill: '#9ca3af' }}
                 tickFormatter={(val) => {
                   const d = new Date(val + 'T00:00:00');
-                  return `${d.getMonth() + 1}/${d.getDate()}`;
+                  return `${d.toLocaleString('default', { month: 'short' })} ${d.getDate()}`;
                 }}
+                axisLine={false}
+                tickLine={false}
               />
-              <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+              <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} allowDecimals={false} axisLine={false} tickLine={false} />
               <Tooltip
                 labelFormatter={(val) => `Date: ${val}`}
-                contentStyle={{ fontSize: 12, borderRadius: 8 }}
+                contentStyle={{ fontSize: 12, borderRadius: 6, border: '1px solid #e5e7eb' }}
               />
               <Legend wrapperStyle={{ fontSize: 12 }} />
-              <Line
-                type="monotone"
+              <Bar
                 dataKey="clicks"
-                stroke="#10b981"
-                strokeWidth={2}
-                dot={{ r: 3 }}
+                fill="#4f86f7"
+                radius={[3, 3, 0, 0]}
                 name="Clicks"
               />
-              <Line
-                type="monotone"
+              <Bar
                 dataKey="installs"
-                stroke="#3b82f6"
-                strokeWidth={2}
-                dot={{ r: 3 }}
+                fill="#34d399"
+                radius={[3, 3, 0, 0]}
                 name="Installs"
               />
-            </LineChart>
+            </BarChart>
           </ResponsiveContainer>
         </>
       )}

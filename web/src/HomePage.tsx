@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ActiveUserStats, fetchActiveUserStats, clearActiveUserData } from './api';
+import { ActiveUserStats, fetchActiveUserStats } from './api';
 import ActiveUsersChart from './ActiveUsersChart';
 
 export default function HomePage() {
@@ -24,29 +24,11 @@ export default function HomePage() {
     loadStats();
   }, []);
 
-  const handleClearData = async () => {
-    if (!confirm('Are you sure you want to clear ALL active user data? This cannot be undone.')) return;
-    try {
-      await clearActiveUserData();
-      await loadStats();
-    } catch (err: any) {
-      setError(err.message);
-    }
-  };
-
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h2 className="text-xl font-bold text-gray-900">Active Users</h2>
-          <p className="text-sm text-gray-500 mt-0.5">30-day rolling window of unique app launches</p>
-        </div>
-        <button
-          onClick={handleClearData}
-          className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 transition-colors"
-        >
-          Clear All Data
-        </button>
+      <div className="mb-6">
+        <h2 className="text-xl font-semibold text-gray-900">Marketing Overview</h2>
+        <p className="text-sm text-gray-500 mt-1">Last 30 days</p>
       </div>
 
       {error && (
@@ -57,22 +39,28 @@ export default function HomePage() {
       )}
 
       {loading ? (
-        <div className="text-center py-12 text-gray-500">Loading stats...</div>
+        <div className="text-center py-12 text-gray-400">Loading stats...</div>
       ) : stats ? (
         <>
           {/* Stat Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 text-center">
-              <div className="text-3xl font-bold text-indigo-600">{stats.totalActiveUsers}</div>
-              <div className="text-sm text-gray-500 mt-1">Total Active Users</div>
+            <div className="bg-white rounded-lg border border-gray-200 px-6 py-5">
+              <div className="text-xs font-medium text-gray-500 uppercase tracking-wider">Active Users</div>
+              <div className="mt-2 flex items-baseline gap-2">
+                <span className="text-2xl font-bold text-gray-900">{stats.totalActiveUsers}</span>
+              </div>
             </div>
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 text-center">
-              <div className="text-3xl font-bold text-blue-600">{stats.nonOrganicInstalls}</div>
-              <div className="text-sm text-gray-500 mt-1">Non-Organic Launches</div>
+            <div className="bg-white rounded-lg border border-gray-200 px-6 py-5">
+              <div className="text-xs font-medium text-gray-500 uppercase tracking-wider">Non-Organic</div>
+              <div className="mt-2 flex items-baseline gap-2">
+                <span className="text-2xl font-bold text-gray-900">{stats.nonOrganicInstalls}</span>
+              </div>
             </div>
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 text-center">
-              <div className="text-3xl font-bold text-green-600">{stats.organicInstalls}</div>
-              <div className="text-sm text-gray-500 mt-1">Organic Launches</div>
+            <div className="bg-white rounded-lg border border-gray-200 px-6 py-5">
+              <div className="text-xs font-medium text-gray-500 uppercase tracking-wider">Organic</div>
+              <div className="mt-2 flex items-baseline gap-2">
+                <span className="text-2xl font-bold text-gray-900">{stats.organicInstalls}</span>
+              </div>
             </div>
           </div>
 

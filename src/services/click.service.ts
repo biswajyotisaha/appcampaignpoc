@@ -40,7 +40,7 @@ export async function recordClick(input: RecordClickInput): Promise<ClickRecord>
       source: 'click-dedup',
       campaignId: input.campaignId,
       fingerprint: fingerprint.substring(0, 16) + '...',
-    }, 'Duplicate click blocked by DB (same device + campaign within 10s)');
+    }, 'Duplicate click blocked by DB (same device + campaign within 6s)');
   }
 
   return click;
