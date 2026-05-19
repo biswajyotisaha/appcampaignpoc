@@ -1,234 +1,235 @@
 @startuml
 
-title How Campaign Links Work - From Ad Click to Personalized App Experience
+title LillyTrack - Complete Attribution & Active User Flow
 
 start
 
-:== STEP 1: Marketer Creates Campaign ==;
+== STEP 1: Campaign Setup ==
 
-:Marketer creates a campaign in the dashboard;
-
-note right
-  Fills in:
-  - Name: "Sleep Wellness"
-  - iOS URL: https://apps.apple.com/app/id123456
-  - Android URL: https://play.google.com/store/apps/details?id=com.lilly.myapp
-  - Fallback URL: https://example.com/landing
-  - Source: "facebook"
-  - Topic: "sleep"
-  - (Optional) iOS Scheme: "lillymobileapp"
-  - (Optional) Android Package: "com.lilly.myapp"
-  - (Optional) Deep Link Path: "/campaign/{slug}"
-end note
-
-:System generates a single tracking link
-https://appcampaignpoc.onrender.com/c/sleep-wellness;
-
-:Marketer puts this link in ads
-(Facebook, Instagram, Email, etc.);
-
-:== STEP 2: User Clicks the Link ==;
-
-:User sees the ad on their phone and taps
-https://appcampaignpoc.onrender.com/c/sleep-wellness;
-
-:Server receives the HTTP request;
+:Marketer creates campaign in dashboard;
 
 note right
-  Every request automatically contains:
-  - IP address (e.g. 203.0.113.42)
-  - User-Agent header (e.g. "Mozilla/5.0
-    (iPhone; CPU iPhone OS 18_7...)")
+  Config:
+  - Name + auto-generated slug
+  - iOS App Store URL
+  - Android Play Store URL
+  - Fallback URL (desktop/other)
+  - Metadata: source + topic
+  - (Optional) Deep Link:
+    iosScheme, androidPackage, deepLinkPath
 end note
 
-:Server extracts device info from User-Agent;
+:System generates tracking link
+**https://...onrender.com/c/{slug}**;
+
+:Link distributed in ads (social, email, web);
+
+== STEP 2: Click & Redirect ==
+
+:User taps tracking link on phone;
+
+:Server receives **GET /c/{slug}**;
 
 note right
-  User-Agent is parsed into:
-  - Device type: "ios" or "android" or "other"
-  - OS version: "18.7"
-  - Device model: "iphone"
+  HTTP headers provide:
+  - IP (x-forwarded-for)
+  - User-Agent (browser string)
 end note
 
-:Server creates a fingerprint hash;
+if (isPrefetchOrBot?) then (YES)
+  note right
+    Detected & skipped:
+    - Prefetch headers (Purpose/Sec-Purpose)
+    - Social unfurlers (Slack/Twitter/FB)
+    - Email scanners (Outlook SafeLinks)
+    - CLI tools (curl/wget/Python-requests)
+    - Short UAs (< 10 chars)
+  end note
+  :Skip click recording;
+else (NO - Real user)
 
-note right
-  Fingerprint = SHA-256 hash of:
-  "203.0.113.42|ios|18.7|iphone"
+  :Parse UA -> type + model;
+  note right
+    "Mozilla/5.0 (Linux; Android 10; K) Chrome/148"
+    -> type="android", model="K"
+  end note
 
-  Result: "a3f2b8c9d4e5..."
-  (unique per device + network combo)
+  :Fingerprint = SHA256("IP|type|model");
+  note right
+    "203.0.113.42|android|k" -> "cf9bdfe0..."
+  end note
 
-  This is saved along with:
-  - Campaign ID
-  - Timestamp (e.g. 10:30:00)
-  - Expiry (24 hours later)
-  - Consumed: false
-end note
-
-if (Deep linking turned on for this campaign?) then (YES)
-
-  if (Device type from User-Agent?) then (iPhone)
-
-    :Server returns an HTML page (not a redirect);
-
+  if (Same fingerprint + campaign within 10s?) then (Duplicate)
+    :Skip recording (pg_advisory_xact_lock);
+  else (New click)
+    :Save click record;
     note right
-      The HTML page contains JavaScript that runs:
-      window.location.href = "lillymobileapp:///campaign/sleep-wellness"
-
-      This tells the phone: "open the app
-      registered to handle lillymobileapp:// URLs"
+      fingerprint, campaign_id, IP, UA,
+      device, timestamp, expires=now+24h,
+      consumed=false
     end note
-
-    if (App is installed and handles this scheme?) then (YES)
-      :iOS opens the app and passes it the URL
-      lillymobileapp:///campaign/sleep-wellness;
-    else (NO)
-      :Nothing happens for 1.5 seconds
-      (page checks: document.hidden == false);
-
-      :JavaScript then runs:
-      window.location.href = "https://apps.apple.com/app/id123456";
-
-      :User arrives at App Store and installs the app;
-    endif
-
-  else (Android)
-
-    :Server returns an HTML page (not a redirect);
-
-    note right
-      The HTML page contains JavaScript that runs:
-      window.location.href =
-      "intent:///campaign/sleep-wellness#Intent;
-       scheme=com.lilly.myapp;
-       package=com.lilly.myapp;
-       S.browser_fallback_url=https://play.google.com/...;
-       end"
-
-      This is Android's Intent URI format.
-      The browser hands it to the OS automatically.
-    end note
-
-    if (App with package com.lilly.myapp installed?) then (YES)
-      :Android opens the app directly;
-    else (NO)
-      :Android reads the browser_fallback_url
-      from the Intent URI and navigates to
-      https://play.google.com/store/apps/details?id=com.lilly.myapp;
-
-      :User arrives at Play Store and installs the app;
-    endif
-
+    :Increment campaign click_count;
   endif
-
-else (NO - no deep link config)
-
-  if (Device type from User-Agent?) then (iPhone)
-    :Server sends HTTP 302 redirect to:
-    https://apps.apple.com/app/id123456;
-    :Browser instantly goes to App Store;
-  elseif (Android) then
-    :Server sends HTTP 302 redirect to:
-    https://play.google.com/store/apps/details?id=com.lilly.myapp;
-    :Browser instantly goes to Play Store;
-  else (Computer / Other)
-    :Server sends HTTP 302 redirect to:
-    https://example.com/landing;
-    stop
-  endif
-
-  :User installs the app from the store;
 
 endif
 
-:== STEP 3: App Launches and Checks Attribution ==;
+if (Deep link configured?) then (YES)
+
+  switch (Device type)
+  case (iOS)
+    :HTML tries **{iosScheme}://{path}**
+    Falls back to App Store (1.5s);
+  case (Android)
+    :HTML tries **intent://{path}** URI
+    Falls back to Play Store (2s);
+  case (Other)
+    :302 redirect -> fallback URL;
+    stop
+  endswitch
+
+else (NO deep link)
+
+  switch (Device type)
+  case (iOS)
+    :302 redirect -> App Store URL;
+  case (Android)
+    :302 redirect -> Play Store URL;
+  case (Other)
+    :302 redirect -> fallback URL;
+    stop
+  endswitch
+
+endif
+
+:User installs (or already has) the app;
+
+== STEP 3: Attribution Match ==
 
 :User opens the app;
 
-:App sends POST request to:
-https://appcampaignpoc.onrender.com/api/v1/attribution/match
-with empty body {};
+:App sends **POST /api/v1/attribution/match**
+Body: { "bundleId": "com.lilly.myapp" };
 
 note right
-  The request automatically includes
-  the phone's IP and User-Agent in
-  the HTTP headers (same as before)
+  Native HTTP client sends IP + UA
+  automatically in request headers
 end note
 
-:Server generates fingerprint from request headers;
+#LightYellow:Detect platform from native User-Agent;
 
 note right
-  Same formula as click time:
-  SHA-256("203.0.113.42|ios|18.7|iphone")
-  = "a3f2b8c9d4e5..."
+  **Native SDK UA Detection:**
+
+  **CFNetwork + Darwin** -> type = "ios"
+  e.g. "MyApp/1 CFNetwork/3860 Darwin/25.5"
+
+  **OkHttp** -> type = "android", model = "K"
+  e.g. "okhttp/4.12.0"
+  (model normalized to match Chrome UA Reduction)
+
+  **Dalvik** -> type = "android"
+  e.g. "Dalvik/2.1.0 (Android 16; Pixel 8)"
 end note
 
-:Server searches for saved clicks
-with this same fingerprint;
+#LightYellow:Generate fingerprint SHA256("IP|type|model");
 
-:Server filters clicks that are:
-- Not consumed (consumed == false)
-- Not expired (within 24 hour window)
-- Clicked before current time;
+note right
+  OkHttp: SHA256("203.0.113.42|android|k")
+  = "cf9bdfe0..." (matches Chrome click!)
 
-if (Any valid clicks found?) then (YES)
+  CFNetwork: SHA256("203.0.113.42|ios|unknown")
+  (won't match Safari's "iphone" model
+   -> loose fallback handles this)
+end note
 
-  :Server picks the most recent valid click;
+:**LAYER 1** - Search clicks by exact fingerprint hash;
 
-  :Server calculates confidence based on time gap;
+if (Exact match?) then (Found clicks)
+else (No exact match)
 
+  :**LAYER 2** - Fallback: search by IP + device type;
   note right
-    Time between click and app launch:
-    - Under 1 hour = "high" confidence
-    - 1 to 6 hours = "medium" confidence
-    - 6 to 24 hours = "low" confidence
-  end note
-
-  :Server marks that click as consumed = true
-  (prevents matching again);
-
-  :Server increments install count for this campaign;
-
-  :Server responds with JSON:
-  {
-    "matched": true,
-    "attribution": {
-      "campaignId": "550e8400-...",
-      "campaignName": "Sleep Wellness",
-      "campaignSlug": "sleep-wellness",
-      "metadata": {
-        "source": "facebook",
-        "topic": "sleep"
-      },
-      "clickedAt": "2026-05-13T10:30:00.000Z",
-      "matchConfidence": "high",
-      "matchMethod": "fingerprint"
-    }
-  };
-
-  :App uses this info to personalize the experience
-  (e.g. show sleep-related content first);
-
-else (NO)
-
-  :Server responds with JSON:
-  {
-    "matched": false,
-    "attribution": null
-  };
-
-  :App shows the normal default experience;
-
-  note right
-    This happens when:
-    - User never clicked a campaign link, OR
-    - Click already consumed on a previous launch, OR
-    - Click expired (older than 24 hours), OR
-    - User is on a different network (IP changed)
+    SQL: WHERE ip = ? AND device = ?
+    Handles model mismatch:
+    - Safari "iPhone" vs CFNetwork "unknown"
+    - Firefox "Pixel 8" vs OkHttp "K"
   end note
 
 endif
+
+if (Any clicks found?) then (YES)
+
+  :Filter: unconsumed + not expired + before now;
+
+  if (Valid clicks remain?) then (YES)
+    :Pick most recent valid click;
+    note right
+      Confidence by time gap:
+      < 1h = "high"
+      1-6h = "medium"
+      6-24h = "low"
+    end note
+    :Mark click **consumed = true** (one-shot);
+    :Increment campaign install_count;
+    #CCFFCC:Return { matched: true, attribution: {
+      campaignName, metadata, confidence } }
+    Record as **NON-ORGANIC**;
+  else (All expired/consumed)
+    #FFCCCC:Return { matched: false }
+    Record as **ORGANIC**;
+  endif
+
+else (NO clicks found at all)
+  #FFCCCC:Return { matched: false, attribution: null }
+  Record as **ORGANIC**;
+endif
+
+== STEP 4: Active User Tracking ==
+
+:Record daily app launch;
+
+note right
+  Per fingerprint per calendar day:
+  - **is_organic**: true / false
+  - **campaign_id**: (if non-organic)
+  - **platform**: ios / android / other
+  - **bundle_id**: "com.lilly.myapp"
+  - **launched_at**: timestamp
+end note
+
+if (Fingerprint already recorded today?) then (YES)
+  if (Existing=ORGANIC, new=NON-ORGANIC?) then (YES)
+    #LightBlue:**UPGRADE** record to non-organic;
+    note right
+      User launched organically first,
+      then got campaign-matched later
+      -> retroactively attributed
+    end note
+  else (No change needed)
+    :Skip (max 1 record per device per day);
+  endif
+else (First launch today)
+  :Insert new launch record;
+endif
+
+:Auto-purge records older than 30 days;
+
+== Dashboard ==
+
+note right
+  **Home Page** (filter by platform + bundleId):
+  - Total Active Users (30-day unique)
+  - Non-Organic / Organic counts
+  - Daily stacked bar charts
+
+  **GET /api/v1/stats/apps** returns:
+  {
+    apps: [{ platform, bundleId }...],
+    platforms: ["android", "ios"]
+  }
+  - platforms = ALL (even without bundleId)
+  - apps = only entries WITH bundleId
+end note
 
 stop
 
