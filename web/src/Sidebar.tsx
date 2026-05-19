@@ -12,8 +12,7 @@ export default function Sidebar({ currentPage, onNavigate }: Props) {
   return (
     <aside className="w-56 bg-gray-900 min-h-screen flex flex-col">
       <div className="p-4 border-b border-gray-700">
-        <h1 className="text-lg font-bold text-white">Campaign Attribution</h1>
-        <p className="text-xs text-gray-400 mt-0.5">POC Dashboard</p>
+        <h1 className="text-lg font-bold text-white">LillyTrack</h1>
       </div>
 
       <nav className="flex-1 p-3 space-y-1">
@@ -34,7 +33,7 @@ export default function Sidebar({ currentPage, onNavigate }: Props) {
       </nav>
 
       <div className="p-4 border-t border-gray-700">
-        <p className="text-xs text-gray-500">v1.0 POC</p>
+        <p className="text-xs text-gray-500">v1.0</p>
       </div>
     </aside>
   );

@@ -9,13 +9,19 @@ export default function CampaignsPage() {
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [chartCampaign, setChartCampaign] = useState<Campaign | null>(null);
+  const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
 
   const loadCampaigns = async () => {
     try {
       setLoading(true);
       const data = await fetchCampaigns();
       setCampaigns(data);
+      // Auto-select first campaign if none selected or current selection was deleted
+      if (data.length > 0 && (!selectedCampaignId || !data.find(c => c.id === selectedCampaignId))) {
+        setSelectedCampaignId(data[0].id);
+      } else if (data.length === 0) {
+        setSelectedCampaignId(null);
+      }
       setError(null);
     } catch (err: any) {
       setError(err.message);
@@ -42,12 +48,14 @@ export default function CampaignsPage() {
     if (!confirm('Are you sure you want to delete this campaign?')) return;
     try {
       await deleteCampaign(id);
-      if (chartCampaign?.id === id) setChartCampaign(null);
+      if (selectedCampaignId === id) setSelectedCampaignId(null);
       await loadCampaigns();
     } catch (err: any) {
       setError(err.message);
     }
   };
+
+  const selectedCampaign = campaigns.find(c => c.id === selectedCampaignId) || null;
 
   return (
     <div>
@@ -72,17 +80,36 @@ export default function CampaignsPage() {
         </div>
       )}
 
+      {/* Analytics Chart with Dropdown */}
+      {!loading && campaigns.length > 0 && (
+        <div className="mb-8">
+          <div className="mb-3">
+            <label htmlFor="campaign-select" className="text-sm font-medium text-gray-700 mr-2">
+              Campaign Analytics:
+            </label>
+            <select
+              id="campaign-select"
+              value={selectedCampaignId || ''}
+              onChange={(e) => setSelectedCampaignId(e.target.value)}
+              className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+            >
+              {campaigns.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          {selectedCampaign && (
+            <CampaignChart campaign={selectedCampaign} onClose={() => setSelectedCampaignId(null)} />
+          )}
+        </div>
+      )}
+
       {/* Create Form */}
       {showForm && (
         <div className="mb-8">
           <CampaignForm onSubmit={handleCreate} onCancel={() => setShowForm(false)} />
-        </div>
-      )}
-
-      {/* Analytics Chart */}
-      {chartCampaign && (
-        <div className="mb-8">
-          <CampaignChart campaign={chartCampaign} onClose={() => setChartCampaign(null)} />
         </div>
       )}
 
@@ -93,7 +120,7 @@ export default function CampaignsPage() {
         <CampaignList
           campaigns={campaigns}
           onDelete={handleDelete}
-          onViewStats={(campaign) => setChartCampaign(campaign)}
+          onViewStats={(campaign) => setSelectedCampaignId(campaign.id)}
         />
       )}
     </div>
