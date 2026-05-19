@@ -242,7 +242,7 @@ export class PostgresStorage implements IStorage {
          SELECT 1 FROM clicks
          WHERE fingerprint = $3::varchar
            AND campaign_id = $2::uuid
-           AND clicked_at > NOW() - INTERVAL '6 seconds'
+           AND clicked_at > NOW() - INTERVAL '10 seconds'
        )`,
       [
         click.id,

@@ -130,7 +130,7 @@ export class MemoryStorage implements IStorage {
       const existing = this.clicks.get(id);
       return existing &&
         existing.campaignId === click.campaignId &&
-        (now - existing.clickedAt.getTime()) < 6_000;
+        (now - existing.clickedAt.getTime()) < 10_000;
     });
 
     if (hasDuplicate) return false;
