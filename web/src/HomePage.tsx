@@ -5,6 +5,7 @@ import ActiveUsersChart from './ActiveUsersChart';
 export default function HomePage() {
   const [stats, setStats] = useState<ActiveUserStats | null>(null);
   const [apps, setApps] = useState<RegisteredApp[]>([]);
+  const [platforms, setPlatforms] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -12,8 +13,6 @@ export default function HomePage() {
   const [selectedPlatform, setSelectedPlatform] = useState<string>('');
   const [selectedApp, setSelectedApp] = useState<string>('');
 
-  // Get unique platforms from registered apps
-  const platforms = [...new Set(apps.map(a => a.platform))].sort();
   // Get apps filtered by selected platform
   const filteredApps = selectedPlatform
     ? apps.filter(a => a.platform === selectedPlatform)
@@ -22,7 +21,8 @@ export default function HomePage() {
   const loadApps = async () => {
     try {
       const data = await fetchRegisteredApps();
-      setApps(data);
+      setApps(data.apps);
+      setPlatforms(data.platforms);
     } catch (_) { /* ignore */ }
   };
 

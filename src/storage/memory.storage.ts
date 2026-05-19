@@ -285,6 +285,13 @@ export class MemoryStorage implements IStorage {
     return apps.sort((a, b) => a.platform.localeCompare(b.platform) || a.bundleId.localeCompare(b.bundleId));
   }
 
+  async getRegisteredPlatforms(): Promise<string[]> {
+    const now = new Date();
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const recent = this.appLaunches.filter(l => l.launchedAt >= thirtyDaysAgo);
+    return [...new Set(recent.map(l => l.platform))].sort();
+  }
+
   async clearAppLaunches(): Promise<void> {
     this.appLaunches = [];
     this.campaigns.clear();

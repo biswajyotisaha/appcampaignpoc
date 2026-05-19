@@ -424,6 +424,16 @@ export class PostgresStorage implements IStorage {
     return result.rows.map(row => ({ platform: row.platform, bundleId: row.bundle_id }));
   }
 
+  async getRegisteredPlatforms(): Promise<string[]> {
+    const result = await this.pool.query(
+      `SELECT DISTINCT platform
+       FROM app_launches
+       WHERE launched_at >= NOW() - INTERVAL '30 days'
+       ORDER BY platform`
+    );
+    return result.rows.map(row => row.platform);
+  }
+
   async clearAppLaunches(): Promise<void> {
     await this.pool.query('TRUNCATE app_launches, clicks, install_events, campaigns CASCADE');
   }

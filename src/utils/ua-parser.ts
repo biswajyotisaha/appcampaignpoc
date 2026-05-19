@@ -34,9 +34,20 @@ export function parseUserAgent(ua: string): ParsedDevice {
     type = 'ios';
   }
 
-  const normalized = `${type}|${osName}|${osVersion}|${deviceModel}`.toLowerCase();
+  // Native Android apps typically use OkHttp or Dalvik — detect these as Android
+  // Also normalize model to "K" to match Chrome UA Reduction (Chrome 110+ reports
+  // model as "K" for all Android devices), enabling exact fingerprint match.
+  let finalModel = deviceModel;
+  if (type === 'other' && (/okhttp/i.test(ua) || /Dalvik/i.test(ua))) {
+    type = 'android';
+    if (finalModel === 'unknown') {
+      finalModel = 'K'; // Match Chrome UA Reduction default
+    }
+  }
 
-  return { type, os: osName, osVersion, deviceModel, normalized };
+  const normalized = `${type}|${osName}|${osVersion}|${finalModel}`.toLowerCase();
+
+  return { type, os: osName, osVersion, deviceModel: finalModel, normalized };
 }
 
 /** Keep only major.minor version to avoid over-splitting fingerprints */

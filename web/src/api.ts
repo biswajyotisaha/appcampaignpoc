@@ -121,11 +121,15 @@ export async function fetchActiveUserStats(platform?: string, bundleId?: string)
   return res.json();
 }
 
-export async function fetchRegisteredApps(): Promise<RegisteredApp[]> {
+export interface AppsResponse {
+  apps: RegisteredApp[];
+  platforms: string[];
+}
+
+export async function fetchRegisteredApps(): Promise<AppsResponse> {
   const res = await fetch(`${BASE}/stats/apps`);
   if (!res.ok) throw new Error('Failed to fetch registered apps');
-  const data = await res.json();
-  return data.apps;
+  return res.json();
 }
 
 export async function clearActiveUserData(): Promise<void> {

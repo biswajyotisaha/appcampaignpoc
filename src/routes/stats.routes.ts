@@ -18,11 +18,12 @@ router.get('/active-users', async (req: Request, res: Response): Promise<void> =
   res.json(stats);
 });
 
-// GET /api/v1/stats/apps - Get list of registered apps (platform + bundleId)
+// GET /api/v1/stats/apps - Get list of registered apps (platform + bundleId) and all platforms
 router.get('/apps', async (req: Request, res: Response): Promise<void> => {
   const storage = getStorage();
   const apps = await storage.getRegisteredApps();
-  res.json({ apps });
+  const platforms = await storage.getRegisteredPlatforms();
+  res.json({ apps, platforms });
 });
 
 // DELETE /api/v1/stats/active-users - Clear all active user data

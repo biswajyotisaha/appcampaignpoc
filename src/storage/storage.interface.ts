@@ -59,5 +59,6 @@ export interface IStorage {
   recordAppLaunch(fingerprint: string, ip: string, isOrganic: boolean, campaignId: string | null, platform: string, bundleId: string | null): Promise<void>;
   getActiveUserStats(filter?: ActiveUserFilter): Promise<ActiveUserStats>;
   getRegisteredApps(): Promise<RegisteredApp[]>;
+  getRegisteredPlatforms(): Promise<string[]>;
   clearAppLaunches(): Promise<void>;
 }
