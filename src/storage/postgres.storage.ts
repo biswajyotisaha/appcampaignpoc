@@ -294,6 +294,14 @@ export class PostgresStorage implements IStorage {
     return result.rows.map(row => this.rowToClick(row));
   }
 
+  async getClicksByIpAndDevice(ip: string, device: string): Promise<ClickRecord[]> {
+    const result = await this.pool.query(
+      'SELECT * FROM clicks WHERE ip = $1 AND device = $2',
+      [ip, device]
+    );
+    return result.rows.map(row => this.rowToClick(row));
+  }
+
   async getClicksByCampaignId(campaignId: string): Promise<ClickRecord[]> {
     const result = await this.pool.query(
       'SELECT * FROM clicks WHERE campaign_id = $1 ORDER BY clicked_at DESC',

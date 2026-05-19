@@ -8,13 +8,13 @@ export interface FingerprintInput {
 }
 
 /**
- * Generates a SHA-256 fingerprint hash from IP + normalized User-Agent.
- * This is the core matching mechanism — same device from same network
- * will produce the same fingerprint within a session.
+ * Generates a SHA-256 fingerprint hash from IP + OS type + device model.
+ * Used for click dedup and primary attribution matching.
  */
 export function generateFingerprint(input: FingerprintInput): string {
   const parsed = parseUserAgent(input.userAgent);
-  const raw = `${input.ip}|${parsed.normalized}`;
+  const model = (parsed.deviceModel || 'unknown').toLowerCase();
+  const raw = `${input.ip}|${parsed.type}|${model}`;
   const hash = crypto.createHash('sha256').update(raw).digest('hex');
 
   logger.info({
@@ -32,4 +32,16 @@ export function generateFingerprint(input: FingerprintInput): string {
   }, 'Fingerprint generated');
 
   return hash;
+}
+
+/**
+ * Generates a loose fingerprint using only IP + OS type.
+ * Used as fallback for attribution matching when exact fingerprint fails
+ * (e.g., Chrome UA Reduction reports "K" as model in browser but app
+ * reports real model like "Pixel 8 Pro").
+ */
+export function generateLooseFingerprint(input: FingerprintInput): string {
+  const parsed = parseUserAgent(input.userAgent);
+  const raw = `${input.ip}|${parsed.type}`;
+  return crypto.createHash('sha256').update(raw).digest('hex');
 }

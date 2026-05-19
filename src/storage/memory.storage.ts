@@ -150,6 +150,10 @@ export class MemoryStorage implements IStorage {
     return clicks;
   }
 
+  async getClicksByIpAndDevice(ip: string, device: string): Promise<ClickRecord[]> {
+    return Array.from(this.clicks.values()).filter(c => c.ip === ip && c.device === device);
+  }
+
   async getClicksByCampaignId(campaignId: string): Promise<ClickRecord[]> {
     return Array.from(this.clicks.values()).filter(c => c.campaignId === campaignId);
   }

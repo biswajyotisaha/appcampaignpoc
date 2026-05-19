@@ -4,16 +4,36 @@ import { getClicksByFingerprint } from './click.service';
 import { getCampaignById } from './campaign.service';
 import { getStorage } from '../storage';
 import { config } from '../config';
+import { parseUserAgent } from '../utils/ua-parser';
+import { logger } from '../utils/logger';
 
 /**
  * Attempts to match a device's first launch to a prior campaign click.
- * Uses fingerprint (IP + normalized UA) and time-window matching.
+ * Uses fingerprint (IP + OS type + device model) for exact match,
+ * falls back to IP + device type for loose match (handles Chrome UA Reduction).
  */
 export async function matchAttribution(request: AttributionRequest): Promise<AttributionResult> {
   const fingerprint = generateFingerprint({ ip: request.ip, userAgent: request.userAgent });
+  const storage = getStorage();
 
-  // Get all clicks with this fingerprint
-  const clicks = await getClicksByFingerprint(fingerprint);
+  // 1. Try exact fingerprint match first
+  let clicks = await getClicksByFingerprint(fingerprint);
+
+  // 2. Fallback: search by IP + device type (handles Chrome UA Reduction
+  //    where browser reports "Android 10; K" but app reports "Android 16; Pixel 8 Pro")
+  if (clicks.length === 0) {
+    const parsed = parseUserAgent(request.userAgent);
+    clicks = await storage.getClicksByIpAndDevice(request.ip, parsed.type);
+
+    if (clicks.length > 0) {
+      logger.info({
+        source: 'attribution-loose-match',
+        ip: request.ip,
+        device: parsed.type,
+        clickCount: clicks.length,
+      }, 'Exact fingerprint miss, found clicks via IP+device fallback');
+    }
+  }
 
   if (clicks.length === 0) {
     return { matched: false, attribution: null };
@@ -46,7 +66,6 @@ export async function matchAttribution(request: AttributionRequest): Promise<Att
   const matchConfidence = getConfidence(deltaHours);
 
   // Increment install count for this campaign
-  const storage = getStorage();
   await storage.incrementInstallCount(campaign.id);
   await storage.recordInstallEvent(campaign.id, now);
 
