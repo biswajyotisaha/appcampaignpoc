@@ -17,6 +17,17 @@ export async function recordClick(input: RecordClickInput): Promise<ClickRecord>
   const storage = getStorage();
   const fingerprint = generateFingerprint({ ip: input.ip, userAgent: input.userAgent });
   const now = new Date();
+
+  // Deduplicate: skip if same fingerprint clicked same campaign in last 30 seconds
+  const existingClicks = await storage.getClicksByFingerprint(fingerprint);
+  const recentDuplicate = existingClicks.find(
+    c => c.campaignId === input.campaignId &&
+      (now.getTime() - c.clickedAt.getTime()) < 30_000
+  );
+  if (recentDuplicate) {
+    return recentDuplicate;
+  }
+
   const expiresAt = new Date(now.getTime() + config.attributionWindowHours * 60 * 60 * 1000);
 
   const click: ClickRecord = {
